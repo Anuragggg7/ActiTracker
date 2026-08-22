@@ -1,0 +1,130 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased selection:bg-rcpit-500 selection:text-white transition-colors duration-200;
+  }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-400 dark:bg-slate-600;
+}
+
+/* Glassmorphism Design Utilities */
+.glass-card {
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border border-slate-200/80 dark:border-slate-800/80 shadow-xl rounded-3xl transition-all duration-300;
+}
+
+.glass-card-hover {
+  @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-slate-200/60 dark:border-slate-800/60 shadow-lg hover:shadow-2xl hover:bg-white/90 dark:hover:bg-slate-900/90 hover:border-rcpit-500/40 dark:hover:border-rcpit-500/40 transition-all duration-300;
+}
+
+.glass-pill {
+  @apply bg-white/60 dark:bg-slate-950/60 backdrop-blur-md border border-slate-200/70 dark:border-slate-800/70 shadow-inner rounded-2xl;
+}
+
+.glass-input {
+  @apply bg-white/70 dark:bg-slate-900/70 backdrop-blur-md border border-slate-200 dark:border-slate-700/80 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-rcpit-500/50 focus:border-rcpit-500 transition-all;
+}
+
+.glass-button {
+  @apply bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-white dark:hover:bg-slate-800 shadow-md hover:shadow-xl transition-all active:scale-[0.98];
+}
+
+/* Glowing background ambient lights */
+.glass-glow-rcpit {
+  box-shadow: 0 0 40px -10px rgba(13, 148, 136, 0.25);
+}
+
+.glass-glow-cyan {
+  box-shadow: 0 0 40px -10px rgba(8, 145, 178, 0.25);
+}
+
+.glass-glow-rose {
+  box-shadow: 0 0 40px -10px rgba(225, 29, 72, 0.25);
+}
+
+.glass-glow-purple {
+  box-shadow: 0 0 45px -5px rgba(147, 51, 234, 0.35);
+}
+
+/* Text Gradient Glowing Animation */
+.text-gradient-purple {
+  background: linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #ec4899 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-cyan {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.4));
+  }
+  50% {
+    filter: drop-shadow(0 0 30px rgba(99, 102, 241, 0.7));
+  }
+}
+
+.animate-glow {
+  animation: pulseGlow 4s infinite ease-in-out;
+}
+
+/* Landing Dark Canvas Container */
+.landing-dark-bg {
+  background-color: #0b0c10;
+  background-image: 
+    radial-gradient(circle at 50% 0%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
+    radial-gradient(circle at 0% 40%, rgba(79, 70, 229, 0.12) 0%, transparent 40%),
+    radial-gradient(circle at 100% 70%, rgba(219, 39, 119, 0.1) 0%, transparent 40%);
+}
+
+/* Page Transition Animation */
+.animate-fade-in {
+  animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Circular Reveal View Transition for Theme Toggle */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
+
