@@ -304,7 +304,7 @@ export const getAllUsersService = async (query = {}, requester = null) => {
   }
 
   if (search && search.trim()) {
-    const s = search.trim();
+    const s = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     mongoQuery.$or = [
       { name: { $regex: s, $options: 'i' } },
       { email: { $regex: s, $options: 'i' } },

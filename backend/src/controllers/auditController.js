@@ -9,11 +9,12 @@ export const getAuditLogs = async (req, res) => {
     if (entity) query.entity = entity;
     if (userRole) query.userRole = userRole;
 
-    if (search) {
+    if (search && search.trim()) {
+      const s = search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       query.$or = [
-        { userName: { $regex: search, $options: 'i' } },
-        { action: { $regex: search, $options: 'i' } },
-        { details: { $regex: search, $options: 'i' } }
+        { userName: { $regex: s, $options: 'i' } },
+        { action: { $regex: s, $options: 'i' } },
+        { details: { $regex: s, $options: 'i' } }
       ];
     }
 

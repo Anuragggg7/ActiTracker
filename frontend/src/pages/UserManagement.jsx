@@ -57,12 +57,25 @@ export const UserManagement = () => {
     try {
       setLoading(true);
       const [usersRes, deptsRes] = await Promise.all([
-        api.get('/users'),
-        api.get('/departments')
+        api.get('/users').catch((err) => {
+          console.warn('User fetch warning:', err.message);
+          return { success: false };
+        }),
+        api.get('/departments').catch((err) => {
+          console.warn('Departments fetch warning:', err.message);
+          return { success: false };
+        })
       ]);
 
-      if (usersRes.success) setUsers(usersRes.users || []);
-      if (deptsRes.success) setDepartments(deptsRes.departments || []);
+      if (usersRes) {
+        const uList = Array.isArray(usersRes) ? usersRes : (usersRes.users || usersRes.data || []);
+        setUsers(uList);
+      }
+
+      if (deptsRes) {
+        const dList = Array.isArray(deptsRes) ? deptsRes : (deptsRes.departments || deptsRes.data || []);
+        setDepartments(dList);
+      }
     } catch (err) {
       showToast(err.message || 'Failed to fetch institutional user data', 'error');
     } finally {

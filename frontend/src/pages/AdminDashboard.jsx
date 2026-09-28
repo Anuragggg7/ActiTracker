@@ -29,19 +29,44 @@ export const AdminDashboard = () => {
 
   const fetchAdminData = async () => {
     try {
+      setLoading(true);
       const [slotRes, userRes, deptsList, auditRes] = await Promise.all([
-        api.get('/slots/requests').catch(() => ({ success: false })),
-        api.get('/users').catch(() => ({ success: false })),
+        api.get('/slots/requests').catch((err) => {
+          console.warn('Slot requests fetch error:', err.message);
+          return { success: false };
+        }),
+        api.get('/users').catch((err) => {
+          console.warn('Users fetch error:', err.message);
+          return { success: false };
+        }),
         fetchDepartmentsWithFallback(),
-        api.get('/audit-logs').catch(() => ({ success: false }))
+        api.get('/audit-logs').catch((err) => {
+          console.warn('Audit logs fetch error:', err.message);
+          return { success: false };
+        })
       ]);
 
-      if (slotRes.success) setSlotRequests(slotRes.slotRequests || []);
-      if (userRes.success) setUsersList(userRes.users || []);
-      setDepartments(deptsList || []);
-      if (auditRes.success) setAuditLogs(auditRes.logs || []);
+      if (slotRes) {
+        const slots = Array.isArray(slotRes) ? slotRes : (slotRes.slotRequests || slotRes.requests || slotRes.data || []);
+        setSlotRequests(slots);
+      }
+
+      if (userRes) {
+        const users = Array.isArray(userRes) ? userRes : (userRes.users || userRes.data || []);
+        setUsersList(users);
+      }
+
+      if (deptsList) {
+        const depts = Array.isArray(deptsList) ? deptsList : (deptsList.departments || deptsList.data || []);
+        setDepartments(depts);
+      }
+
+      if (auditRes) {
+        const logs = Array.isArray(auditRes) ? auditRes : (auditRes.logs || auditRes.auditLogs || auditRes.data || []);
+        setAuditLogs(logs);
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching admin data:', err);
     } finally {
       setLoading(false);
     }
@@ -129,7 +154,7 @@ export const AdminDashboard = () => {
       <ActionCenter />
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 dark:border-slate-800 pb-2">
         <button
           onClick={() => setActiveTab('slots')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
@@ -155,6 +180,15 @@ export const AdminDashboard = () => {
           }`}
         >
           <Building className="w-4 h-4" /> Departments ({departments.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'audit' ? 'bg-rcpit-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-emerald-400" /> System Audit Trail ({auditLogs.length})
         </button>
       </div>
 
@@ -368,6 +402,70 @@ export const AdminDashboard = () => {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: System Audit Trail */}
+      {activeTab === 'audit' && (
+        <div className="glass-card p-6 space-y-4 animate-fade-in">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-emerald-500" /> Immutable System Audit Trail ({auditLogs.length})
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Real-time security audit log of user authentications, status changes, and governance events
+              </p>
+            </div>
+            <Link
+              to="/audit-logs"
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl shadow-sm flex items-center gap-1.5 transition-all border border-slate-700"
+            >
+              <Clock className="w-4 h-4" /> Full Audit Portal
+            </Link>
+          </div>
+
+          {auditLogs.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">No audit log records available.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
+                    <th className="pb-3 px-2">Timestamp</th>
+                    <th className="pb-3 px-2">User / Role</th>
+                    <th className="pb-3 px-2">Action Event</th>
+                    <th className="pb-3 px-2">Target Entity</th>
+                    <th className="pb-3 px-2">Event Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {auditLogs.slice(0, 30).map((log) => (
+                    <tr key={log._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
+                      <td className="py-3 px-2 text-slate-500 font-medium whitespace-nowrap">
+                        {new Date(log.createdAt).toLocaleString()}
+                      </td>
+                      <td className="py-3 px-2 font-bold text-slate-900 dark:text-white">
+                        <div>{log.userName || 'System'}</div>
+                        <div className="text-[10px] text-rcpit-600 uppercase font-extrabold">{log.userRole}</div>
+                      </td>
+                      <td className="py-3 px-2 font-bold text-slate-800 dark:text-slate-200">
+                        <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-mono text-[10px]">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="py-3 px-2 text-slate-600 dark:text-slate-400">
+                        {log.entity}
+                      </td>
+                      <td className="py-3 px-2 text-slate-600 dark:text-slate-400 max-w-xs truncate">
+                        {log.details || 'N/A'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

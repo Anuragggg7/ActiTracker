@@ -13,9 +13,13 @@ export const AuditLogs = () => {
   const fetchAuditLogs = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/audit-logs');
-      if (res.success) {
-        setLogs(res.logs || []);
+      const res = await api.get('/audit-logs').catch((err) => {
+        console.warn('Audit logs fetch warning:', err.message);
+        return { success: false };
+      });
+      if (res) {
+        const logList = Array.isArray(res) ? res : (res.logs || res.auditLogs || res.data || []);
+        setLogs(logList);
       }
     } catch (err) {
       showToast(err.message || 'Failed to fetch audit logs', 'error');
