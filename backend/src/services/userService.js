@@ -28,22 +28,17 @@ export const createFacultyService = async (adminUser, facultyData) => {
     status
   } = facultyData;
 
-  // 1. Validation: Employee ID required & non-empty
-  if (!employeeId || !employeeId.trim()) {
-    throw new Error('Official Employee/Faculty ID is required and cannot be empty.');
-  }
+  // 1. Employee ID: allow provided ID or auto-generate fallback
+  const cleanEmployeeId = (employeeId && employeeId.trim()) ? employeeId.trim() : `FAC-${Date.now().toString().slice(-4)}`;
 
   // 2. Validation: Email required & non-empty
   if (!email || !email.trim()) {
     throw new Error('Official institutional email is required.');
   }
 
-  // 3. Validation: Password required
-  if (!password || !password.trim()) {
-    throw new Error('Initial password is required.');
-  }
+  // 3. Validation: Password assignment & fallback
+  const assignedPassword = (password && password.trim()) ? password.trim() : 'Rcpit@123';
 
-  const cleanEmployeeId = employeeId.trim();
   const cleanEmail = email.toLowerCase().trim();
 
   // 4. Unique Check: Employee ID uniqueness
@@ -68,7 +63,7 @@ export const createFacultyService = async (adminUser, facultyData) => {
   }
 
   // 7. Password Hashing
-  const passwordHash = await bcrypt.hash(password, 10);
+  const passwordHash = await bcrypt.hash(assignedPassword, 10);
 
   // 8. Create User Document
   const newFaculty = await User.create({

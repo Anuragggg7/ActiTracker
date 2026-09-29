@@ -117,7 +117,8 @@ export const createUserByAdmin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User with this email or employee ID already exists' });
     }
 
-    const passwordHash = await bcrypt.hash(password || 'Rcpit@123', 10);
+    const assignedPassword = (password && password.trim()) ? password.trim() : 'Rcpit@123';
+    const passwordHash = await bcrypt.hash(assignedPassword, 10);
 
     const newUser = await User.create({
       name: name?.trim(),

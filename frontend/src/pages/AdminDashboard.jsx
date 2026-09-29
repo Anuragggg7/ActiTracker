@@ -7,7 +7,7 @@ import { useNotifications } from '../context/NotificationContext';
 import { fetchDepartmentsWithFallback } from '../utils/departments';
 import CreateActivityModal from '../components/CreateActivityModal';
 import {
-  Users, Building, Clock, ShieldAlert, Plus, AlertTriangle, CheckCircle, XCircle, Search, RefreshCw
+  Users, Building, Clock, ShieldAlert, Plus, AlertTriangle, CheckCircle, XCircle, Search, RefreshCw, Eye, EyeOff
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
@@ -23,6 +23,7 @@ export const AdminDashboard = () => {
 
   // User Creation Form Modal State
   const [showUserModal, setShowUserModal] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [userForm, setUserForm] = useState({
     name: '', email: '', password: 'Rcpit@123', role: 'HOD', departmentId: '', employeeId: '', designation: ''
   });
@@ -494,6 +495,29 @@ export const AdminDashboard = () => {
                   placeholder="user@rcpit.ac.in"
                   className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
                 />
+              </div>
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Assign Password <span className="text-slate-400 font-normal text-[10px]">(Default: Rcpit@123)</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={userForm.password}
+                    onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                    placeholder="Enter password for account ID"
+                    className="w-full p-2.5 pr-10 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-mono text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1"
+                    title={showPassword ? "Hide Password" : "Show Password"}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Role</label>
