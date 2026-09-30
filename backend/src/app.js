@@ -28,6 +28,14 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
+// Root Endpoint - Backend Health/Availability Confirmation
+app.get('/', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'ActiTracker Backend is running successfully'
+  });
+});
+
 // Health Check Endpoint (un-authenticated)
 app.get('/api/health', (req, res) => {
   const dbState = mongoose.connection.readyState;
