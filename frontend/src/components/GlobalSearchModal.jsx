@@ -143,7 +143,9 @@ export const GlobalSearchModal = ({ isOpen, onClose }) => {
                         className="p-2.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between text-xs font-semibold text-slate-800 dark:text-slate-200"
                       >
                         <span>{dept.name} ({dept.code})</span>
-                        <span className="text-[10px] text-rcpit-600 font-bold">Performance: {dept.performanceScore || 85}%</span>
+                        {dept.performanceScore !== undefined && dept.performanceScore !== null && (
+                          <span className="text-[10px] text-rcpit-600 font-bold">Performance: {dept.performanceScore}%</span>
+                        )}
                       </div>
                     ))}
                   </div>

@@ -94,7 +94,7 @@ export const generateDepartmentPDF = (department, activities, res) => {
   doc.fillColor('#333333').fontSize(10);
   doc.text(`HOD: ${department.hodId?.name || 'Assigned HOD'}`);
   doc.text(`Total Recorded Activities: ${activities.length}`);
-  doc.text(`Department Performance Score: ${department.performanceScore || 85}/100`);
+  doc.text(`Department Performance Score: ${department.performanceScore ?? 0}/100`);
 
   doc.moveDown(1.5);
 
