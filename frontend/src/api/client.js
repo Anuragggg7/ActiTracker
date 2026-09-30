@@ -1,7 +1,44 @@
 import axios from 'axios';
 
+// Resolve backend base URL from VITE_API_URL or fallback to relative '/api' for Vite dev proxy
+export const getBaseUrl = () => {
+  let envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl) {
+    return '/api';
+  }
+  envUrl = envUrl.replace(/\/+$/, '');
+  if (envUrl === '/api') return '/api';
+  if (!envUrl.endsWith('/api')) {
+    return `${envUrl}/api`;
+  }
+  return envUrl;
+};
+
+// Helper for opening links, downloading files, rendering iframe src or media elements across environments
+export const getApiUrl = (path = '') => {
+  if (!path) return '';
+  if (typeof path !== 'string') return path;
+  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('data:')) {
+    return path;
+  }
+
+  const envUrl = import.meta.env.VITE_API_URL;
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+
+  if (!envUrl || envUrl === '/api') {
+    return cleanPath;
+  }
+
+  const rootDomain = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+
+  if (cleanPath.startsWith('/api')) {
+    return `${rootDomain}${cleanPath}`;
+  }
+  return `${rootDomain}${cleanPath}`;
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json'
   }

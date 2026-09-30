@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Download, FileText, ExternalLink, RefreshCw, Layers } from 'lucide-react';
-import api from '../api/client';
+import api, { getApiUrl } from '../api/client';
 
 export const PDFViewerModal = ({ isOpen, onClose, activityId }) => {
   const [versions, setVersions] = useState([]);
@@ -87,7 +87,7 @@ export const PDFViewerModal = ({ isOpen, onClose, activityId }) => {
               {generating ? 'Regenerating...' : 'Regenerate PDF'}
             </button>
             <a
-              href={selectedVersionUrl || `/api/activities/${activityId}/report/pdf`}
+              href={getApiUrl(selectedVersionUrl || `/api/activities/${activityId}/report/pdf`)}
               target="_blank"
               rel="noreferrer"
               className="px-3.5 py-1.5 bg-rcpit-600 hover:bg-rcpit-500 text-white font-extrabold text-xs rounded-xl flex items-center gap-1.5 shadow"
@@ -106,7 +106,7 @@ export const PDFViewerModal = ({ isOpen, onClose, activityId }) => {
         {/* Embedded PDF iframe */}
         <div className="flex-1 bg-slate-100 dark:bg-slate-950 p-2">
           <iframe
-            src={selectedVersionUrl || `/api/activities/${activityId}/report/pdf`}
+            src={getApiUrl(selectedVersionUrl || `/api/activities/${activityId}/report/pdf`)}
             title="Official PDF Report Preview"
             className="w-full h-full rounded-2xl border border-slate-200 dark:border-slate-800 shadow-inner"
           />

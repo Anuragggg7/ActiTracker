@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import api from '../api/client';
+import api, { getApiUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import StatusBadge from '../components/StatusBadge';
@@ -276,7 +276,7 @@ export const ActivityDetail = () => {
   };
 
   const handleExportCsv = () => {
-    window.open(`/api/activities/${id}/attendance/export`, '_blank');
+    window.open(getApiUrl(`/api/activities/${id}/attendance/export`), '_blank');
   };
 
   // Post-Event Report Submit
@@ -593,7 +593,7 @@ export const ActivityDetail = () => {
                         <span className="text-[10px] font-bold">Play Video</span>
                       </div>
                     ) : (
-                      <img src={m.fileUrl} alt={m.caption} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
+                      <img src={getApiUrl(m.fileUrl)} alt={m.caption} className="w-full h-full object-cover group-hover:scale-105 transition-all duration-300" />
                     )}
 
                     <span className={`absolute top-2 left-2 px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase ${
@@ -709,7 +709,7 @@ export const ActivityDetail = () => {
                         <Eye className="w-3.5 h-3.5 text-rcpit-600" /> Preview
                       </button>
                       <a
-                        href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                        href={getApiUrl(doc.fileUrl)} target="_blank" rel="noopener noreferrer"
                         className="px-3.5 py-1.5 bg-rcpit-600 text-white font-bold rounded-xl flex items-center gap-1.5 shadow"
                       >
                         <Download className="w-3.5 h-3.5" /> Download
@@ -764,7 +764,7 @@ export const ActivityDetail = () => {
 
                     <div className="flex items-center gap-3">
                       <a
-                        href={doc.fileUrl} target="_blank" rel="noopener noreferrer"
+                        href={getApiUrl(doc.fileUrl)} target="_blank" rel="noopener noreferrer"
                         className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-200"
                       >
                         <Download className="w-3.5 h-3.5" /> Download
@@ -1096,9 +1096,9 @@ export const ActivityDetail = () => {
             </button>
             <div className="p-4 flex items-center justify-center min-h-[50vh]">
               {media[selectedMediaIndex].mediaType?.toUpperCase() === 'VIDEO' ? (
-                <video src={media[selectedMediaIndex].fileUrl} controls autoPlay className="max-h-[70vh] rounded-2xl" />
+                <video src={getApiUrl(media[selectedMediaIndex].fileUrl)} controls autoPlay className="max-h-[70vh] rounded-2xl" />
               ) : (
-                <img src={media[selectedMediaIndex].fileUrl} alt={media[selectedMediaIndex].caption} className="max-h-[75vh] object-contain rounded-2xl" />
+                <img src={getApiUrl(media[selectedMediaIndex].fileUrl)} alt={media[selectedMediaIndex].caption} className="max-h-[75vh] object-contain rounded-2xl" />
               )}
             </div>
             <div className="p-4 bg-slate-950 text-white flex items-center justify-between text-xs">

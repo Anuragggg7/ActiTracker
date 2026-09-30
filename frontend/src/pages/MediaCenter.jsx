@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import api from '../api/client';
+import api, { getApiUrl } from '../api/client';
 import { useNotifications } from '../context/NotificationContext';
 import { 
   Image as ImageIcon, 
@@ -239,12 +239,12 @@ export const MediaCenter = () => {
                         <div className="h-44 w-full relative overflow-hidden">
                           {item.mediaType === 'video' ? (
                             <video
-                              src={item.url}
+                              src={getApiUrl(item.url)}
                               className="w-full h-full object-cover"
                             />
                           ) : (
                             <img
-                              src={item.url}
+                              src={getApiUrl(item.url)}
                               alt={item.caption || activity.title}
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                             />
@@ -288,10 +288,10 @@ export const MediaCenter = () => {
                 >
                   <div className="relative h-48 bg-slate-900 overflow-hidden">
                     {item.mediaType === 'video' ? (
-                      <video src={item.url} className="w-full h-full object-cover" />
+                      <video src={getApiUrl(item.url)} className="w-full h-full object-cover" />
                     ) : (
                       <img
-                        src={item.url}
+                        src={getApiUrl(item.url)}
                         alt={item.caption || 'Event Media'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
@@ -347,14 +347,14 @@ export const MediaCenter = () => {
             <div className="relative flex-1 bg-black flex items-center justify-center min-h-[300px] max-h-[65vh]">
               {selectedMedia.mediaType === 'video' ? (
                 <video
-                  src={selectedMedia.url}
+                  src={getApiUrl(selectedMedia.url)}
                   controls
                   autoPlay
                   className="max-h-[65vh] w-auto max-w-full object-contain"
                 />
               ) : (
                 <img
-                  src={selectedMedia.url}
+                  src={getApiUrl(selectedMedia.url)}
                   alt={selectedMedia.caption || 'Event Media'}
                   className="max-h-[65vh] w-auto max-w-full object-contain"
                 />

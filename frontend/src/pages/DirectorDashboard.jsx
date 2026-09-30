@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import api from '../api/client';
+import api, { getApiUrl } from '../api/client';
 import { useNotifications } from '../context/NotificationContext';
 import { fetchDepartmentsWithFallback } from '../utils/departments';
 import ActionCenter from '../components/ActionCenter';
@@ -88,7 +88,7 @@ export const DirectorDashboard = () => {
     const params = new URLSearchParams();
     if (academicYear) params.append('academicYear', academicYear);
     if (selectedDeptId) params.append('departmentId', selectedDeptId);
-    window.open(`/api/analytics/export?${params.toString()}`, '_blank');
+    window.open(getApiUrl(`/api/analytics/export?${params.toString()}`), '_blank');
   };
 
   if (error) {
