@@ -102,6 +102,9 @@ export const changePassword = async (req, res) => {
 
 // Reset database state for UAT testing
 export const resetTestDatabase = async (req, res) => {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(403).json({ success: false, message: 'Database reset endpoints are strictly disabled in production.' });
+  }
   try {
     const models = [
       (await import('../models/Activity.js')).default,

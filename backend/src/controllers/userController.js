@@ -9,7 +9,7 @@ import {
 import User from '../models/User.js';
 import Department from '../models/Department.js';
 import bcrypt from 'bcryptjs';
-import { logAudit } from '../utils/auditLogger.js';
+import { logAudit, logDbWrite } from '../utils/auditLogger.js';
 
 /**
  * Controller Layer: User & Faculty Account Operations
@@ -117,7 +117,11 @@ export const createUserByAdmin = async (req, res) => {
       return res.status(400).json({ success: false, message: 'User with this email or employee ID already exists' });
     }
 
-    const assignedPassword = (password && password.trim()) ? password.trim() : 'Rcpit@123';
+    if (!password || !password.trim()) {
+      return res.status(400).json({ success: false, message: 'Initial password is required when creating a user account.' });
+    }
+
+    const assignedPassword = password.trim();
     const passwordHash = await bcrypt.hash(assignedPassword, 10);
 
     const newUser = await User.create({
@@ -137,6 +141,7 @@ export const createUserByAdmin = async (req, res) => {
       await Department.findByIdAndUpdate(departmentId, { hodId: newUser._id });
     }
 
+    logDbWrite({ collection: 'users', operation: 'CREATE', source: 'POST /api/users/admin-create', userId: req.user._id, details: `Created ${role} account (${newUser.email})` });
     await logAudit({ req, user: req.user, action: 'ADMIN_CREATE_USER', entity: 'User', entityId: newUser._id, details: `Created ${role} account for ${name}` });
 
     res.status(201).json({ success: true, message: `${role} account created successfully`, user: newUser });

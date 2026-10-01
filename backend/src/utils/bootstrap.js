@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Department from '../models/Department.js';
+import { logDbWrite } from './auditLogger.js';
 
 /**
  * System Bootstrap Routine
@@ -9,9 +10,7 @@ import Department from '../models/Department.js';
  */
 export const bootstrapSystemAdminAndDepts = async () => {
   try {
-    const userCount = await User.countDocuments();
-    
-    // 1. Ensure Academic Departments Exist
+    // 1. Ensure Academic Master Departments Exist
     const deptList = [
       { name: 'Artificial Intelligence & Machine Learning', code: 'AIML' },
       { name: 'Artificial Intelligence & Data Science', code: 'AIDS' },
@@ -29,7 +28,8 @@ export const bootstrapSystemAdminAndDepts = async () => {
       let deptDoc = await Department.findOne({ code: d.code });
       if (!deptDoc) {
         deptDoc = await Department.create(d);
-        console.log(`[Bootstrap] Created Institutional Department: ${d.name} (${d.code})`);
+        logDbWrite({ collection: 'departments', operation: 'CREATE', source: 'Bootstrap Routine', details: `Created master department: ${d.code}` });
+        console.log(`[Bootstrap] Created Master Institutional Department: ${d.name} (${d.code})`);
       }
       deptMap[d.code] = deptDoc;
     }
@@ -37,10 +37,13 @@ export const bootstrapSystemAdminAndDepts = async () => {
     // 2. Ensure Single System Admin Account Exists
     const adminUser = await User.findOne({ role: 'ADMIN' });
     if (!adminUser) {
-      const adminPassword = process.env.ADMIN_PASSWORD || 'Admin@rcpit2026';
+      const adminPassword = process.env.ADMIN_PASSWORD || process.env.ADMIN_INITIAL_PASSWORD;
+      if (!adminPassword) {
+        throw new Error('ADMIN_PASSWORD environment variable is required to initialize the System Administrator account.');
+      }
       const adminPasswordHash = await bcrypt.hash(adminPassword, 10);
 
-      await User.create({
+      const createdAdmin = await User.create({
         name: 'System Administrator',
         email: process.env.ADMIN_EMAIL || 'admin@rcpit.ac.in',
         passwordHash: adminPasswordHash,
@@ -50,7 +53,9 @@ export const bootstrapSystemAdminAndDepts = async () => {
         status: 'APPROVED',
         isSystemAdmin: true
       });
-      console.log('✅ [Bootstrap] Initial System Administrator Account Created (admin@rcpit.ac.in)');
+
+      logDbWrite({ collection: 'users', operation: 'CREATE', source: 'Bootstrap Routine', userId: createdAdmin._id, details: 'Created System Administrator Master Account' });
+      console.log('✅ [Bootstrap] Initial System Administrator Account Initialized (admin@rcpit.ac.in)');
     }
   } catch (err) {
     console.error('[Bootstrap Error]', err.message);

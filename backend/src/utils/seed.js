@@ -17,6 +17,9 @@ import AuditLog from '../models/AuditLog.js';
 import { connectDB } from '../config/db.js';
 
 export const seedDatabase = async (auto = false) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Seed scripts are strictly disabled in production environment.');
+  }
   try {
     if (!auto) {
       await connectDB();

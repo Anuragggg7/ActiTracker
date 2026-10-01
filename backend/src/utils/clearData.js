@@ -17,6 +17,9 @@ import { connectDB } from '../config/db.js';
 import { bootstrapSystemAdminAndDepts } from './bootstrap.js';
 
 export const clearDatabase = async () => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('Database clear scripts are strictly disabled in production environment.');
+  }
   try {
     await connectDB();
     console.log('[ClearData] Connecting to database...');

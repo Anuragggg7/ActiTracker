@@ -25,7 +25,7 @@ export const AdminDashboard = () => {
   const [showUserModal, setShowUserModal] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [userForm, setUserForm] = useState({
-    name: '', email: '', password: 'Rcpit@123', role: 'HOD', departmentId: '', employeeId: '', designation: ''
+    name: '', email: '', password: '', role: 'HOD', departmentId: '', employeeId: '', designation: ''
   });
 
   const fetchAdminData = async () => {
@@ -498,7 +498,7 @@ export const AdminDashboard = () => {
               </div>
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Assign Password <span className="text-slate-400 font-normal text-[10px]">(Default: Rcpit@123)</span>
+                  Assign Password <span className="text-slate-400 font-normal text-[10px]">(Required initial password)</span>
                 </label>
                 <div className="relative">
                   <input

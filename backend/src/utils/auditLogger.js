@@ -23,3 +23,13 @@ export const logAudit = async ({ req, user, action, entity, entityId = '', depar
     console.error('[AuditLog Error]', err.message);
   }
 };
+
+/**
+ * Safe Database Write Logger for Runtime & Audit Inspection
+ * Never logs passwords, passwordHashes, JWT secrets, or DB credentials.
+ */
+export const logDbWrite = ({ collection, operation, source = 'API', userId = 'SYSTEM', details = '' }) => {
+  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DB_WRITE_LOGS === 'true') {
+    console.log(`[DB WRITE] Collection: ${collection} | Operation: ${operation} | Source: ${source} | User: ${userId}${details ? ' | Details: ' + details : ''}`);
+  }
+};
