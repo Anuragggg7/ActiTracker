@@ -41,18 +41,7 @@ export const authenticateUserService = async (identifier, password) => {
     throw new Error('Invalid Employee ID/email or password.');
   }
 
-  let isMatch = await user.comparePassword(password);
-
-  // Development/UAT fallback check for System Admin account
-  if (!isMatch && (user.role === 'ADMIN' || user.isSystemAdmin)) {
-    const adminVariants = ['Admin@rcpit2026', 'admin123', 'password123', 'Admin@rcpit123'];
-    for (const altPass of adminVariants) {
-      if (await user.comparePassword(altPass) || password === altPass) {
-        isMatch = true;
-        break;
-      }
-    }
-  }
+  const isMatch = await user.comparePassword(password);
 
   if (!isMatch) {
     // Secure generic message to prevent credential guessing

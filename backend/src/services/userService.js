@@ -36,8 +36,11 @@ export const createFacultyService = async (adminUser, facultyData) => {
     throw new Error('Official institutional email is required.');
   }
 
-  // 3. Validation: Password assignment & fallback
-  const assignedPassword = (password && password.trim()) ? password.trim() : 'Rcpit@123';
+  // 3. Validation: Password requirement
+  if (!password || !password.trim()) {
+    throw new Error('Initial password is required for faculty account creation.');
+  }
+  const assignedPassword = password.trim();
 
   const cleanEmail = email.toLowerCase().trim();
 

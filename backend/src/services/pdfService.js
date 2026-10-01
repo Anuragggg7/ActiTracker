@@ -152,7 +152,7 @@ export const buildOfficialActivityPDF = async ({ activity, report, attendanceRec
       currentY += 45;
 
       // Attendance Table
-      doc.fillColor(TEXT_DARK).fontSize(9).font('Helvetica-Bold').text('Participant Register Log (Sample Excerpt):', 40, currentY);
+      doc.fillColor(TEXT_DARK).fontSize(9).font('Helvetica-Bold').text('Participant Register Log:', 40, currentY);
       currentY += 14;
 
       // Table Header
