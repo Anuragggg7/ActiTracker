@@ -34,17 +34,40 @@ export const authenticateUserService = async (identifier, password) => {
     ]
   };
 
+  const dbName = User.db.name;
+  const collectionName = User.collection.name;
+
+  console.log('\n--- [AUTH DIAGNOSTIC] ---');
+  console.log(`DATABASE_NAME: ${dbName}`);
+  console.log(`USERS_COLLECTION: ${collectionName}`);
+  console.log(`IDENTIFIER_RECEIVED: ${cleanIdentifier}`);
+
   const user = await User.findOne(query).populate('departmentId');
 
   if (!user) {
-    // Secure generic message to prevent account enumeration
+    console.log('USER_FOUND: false');
+    console.log('USER_EMAIL: N/A');
+    console.log('USER_EMPLOYEE_ID: N/A');
+    console.log('USER_ROLE: N/A');
+    console.log('USER_STATUS: N/A');
+    console.log('PASSWORD_HASH_EXISTS: false');
+    console.log('PASSWORD_MATCH_RESULT: false');
+    console.log('--------------------------\n');
     throw new Error('Invalid Employee ID/email or password.');
   }
 
+  console.log('USER_FOUND: true');
+  console.log(`USER_EMAIL: ${user.email}`);
+  console.log(`USER_EMPLOYEE_ID: ${user.employeeId}`);
+  console.log(`USER_ROLE: ${user.role}`);
+  console.log(`USER_STATUS: ${user.status}`);
+  console.log(`PASSWORD_HASH_EXISTS: ${Boolean(user.passwordHash)}`);
+
   const isMatch = await user.comparePassword(password);
+  console.log(`PASSWORD_MATCH_RESULT: ${isMatch}`);
+  console.log('--------------------------\n');
 
   if (!isMatch) {
-    // Secure generic message to prevent credential guessing
     throw new Error('Invalid Employee ID/email or password.');
   }
 

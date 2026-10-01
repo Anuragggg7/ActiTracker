@@ -9,8 +9,9 @@ export const connectDB = async () => {
   }
   
   try {
-    const conn = await mongoose.connect(uri);
-    console.log(`✅ [MongoDB Atlas] Connected successfully to host: ${conn.connection.host}`);
+    const dbName = process.env.MONGODB_DB_NAME || 'activitytracker_rcpit';
+    const conn = await mongoose.connect(uri, { dbName });
+    console.log(`✅ [MongoDB Atlas] Connected successfully to host: ${conn.connection.host} | Database: ${conn.connection.db.databaseName}`);
     return conn;
   } catch (error) {
     console.error(`❌ [MongoDB Connection Failure] Cannot connect to MongoDB Atlas database (${error.message}).`);
