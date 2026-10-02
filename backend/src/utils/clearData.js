@@ -53,6 +53,7 @@ export const clearDatabase = async () => {
   } finally {
     mongoose.disconnect();
   }
-};
+if (process.argv[1] && (process.argv[1].endsWith('clearData.js') || process.argv[1].includes('clearData'))) {
+  clearDatabase();
+}
 
-clearDatabase();

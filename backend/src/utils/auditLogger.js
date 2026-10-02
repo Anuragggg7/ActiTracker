@@ -29,7 +29,7 @@ export const logAudit = async ({ req, user, action, entity, entityId = '', depar
  * Never logs passwords, passwordHashes, JWT secrets, or DB credentials.
  */
 export const logDbWrite = ({ collection, operation, source = 'API', userId = 'SYSTEM', details = '' }) => {
-  if (process.env.NODE_ENV !== 'production' || process.env.ENABLE_DB_WRITE_LOGS === 'true') {
-    console.log(`[DB WRITE] Collection: ${collection} | Operation: ${operation} | Source: ${source} | User: ${userId}${details ? ' | Details: ' + details : ''}`);
-  }
+  const env = process.env.NODE_ENV || 'development';
+  console.log(`[DB WRITE] environment=${env} collection=${collection} operation=${operation} reason="${details || 'N/A'}" caller=${source}`);
 };
+

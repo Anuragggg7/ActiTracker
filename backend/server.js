@@ -1,4 +1,18 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+
+// Robust dotenv loading regardless of execution working directory
+const possibleEnvPaths = [
+  path.join(process.cwd(), '.env'),
+  path.join(process.cwd(), 'backend', '.env')
+];
+for (const envPath of possibleEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    dotenv.config({ path: envPath });
+    break;
+  }
+}
 dotenv.config();
 
 import app from './src/app.js';
