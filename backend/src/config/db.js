@@ -84,7 +84,7 @@ export const connectDB = async () => {
     const actualDbName = conn.connection.db?.databaseName || dbName;
 
     console.log('=======================================================');
-    console.log('✅ [MongoDB Atlas Connection Verified]');
+    console.log('✅ [MongoDB Connection Verified]');
     console.log(`   Environment:           ${nodeEnv}`);
     console.log(`   Database Host:         ${host}`);
     console.log(`   Database Name:         ${actualDbName}`);
@@ -93,8 +93,33 @@ export const connectDB = async () => {
 
     return conn;
   } catch (error) {
-    console.error(`❌ [MongoDB Connection Failure] Cannot connect to database (${error.message}).`);
-    throw error;
+    console.warn(`⚠️ [MongoDB Warning] Primary database connection failed (${error.message}).`);
+
+    if (nodeEnv === 'production') {
+      console.error('❌ [MongoDB Startup Failure] Cannot start backend server without valid primary database in production.');
+      throw error;
+    }
+
+    console.log('🔄 Attempting automatic local In-Memory MongoMemoryServer fallback for local development/testing...');
+    try {
+      const { MongoMemoryServer } = await import('mongodb-memory-server');
+      const mongoServer = await MongoMemoryServer.create();
+      const fallbackUri = mongoServer.getUri();
+      const conn = await mongoose.connect(fallbackUri, { dbName });
+      const host = conn.connection.host || '127.0.0.1';
+
+      console.log('=======================================================');
+      console.log('✅ [MongoDB In-Memory Fallback Connected]');
+      console.log(`   Environment:           ${nodeEnv}`);
+      console.log(`   Database Host:         ${host}`);
+      console.log(`   Database Name:         ${dbName}`);
+      console.log('=======================================================');
+
+      return conn;
+    } catch (fallbackError) {
+      console.error(`❌ [MongoDB Connection Failure] Both primary database and In-Memory fallback failed (${fallbackError.message}).`);
+      throw error;
+    }
   }
 };
 
