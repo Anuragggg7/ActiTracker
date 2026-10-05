@@ -70,7 +70,7 @@ export const uploadImages = async (req, res) => {
     }
 
     if (user.role === 'FACULTY') {
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: activity.hodId || activity.departmentId,
         recipientRole: 'HOD',
         title: `Media Uploaded for Review: "${activity.title}"`,
@@ -169,7 +169,7 @@ export const verifyMedia = async (req, res) => {
     }
     await media.save();
 
-    await Notification.create({
+    await Notification.createIdempotent({
       recipientId: media.uploadedBy,
       title: `Media ${status}: "${media.caption || 'Event Media'}"`,
       message: status === 'VERIFIED'

@@ -89,7 +89,7 @@ export const createActivity = async (req, res) => {
     await activity.save();
 
     if (status === 'SUBMITTED' && department.hodId) {
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: department.hodId._id || department.hodId,
         senderId: req.user._id,
         title: 'New Activity Submitted for Approval',
@@ -221,7 +221,7 @@ export const reviewActivityByHod = async (req, res) => {
       activity.status = 'HOD_APPROVED';
       activity.hodReviewNotes = notes || 'Approved by HOD';
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: activity.coordinatorId._id,
         senderId: req.user._id,
         title: 'Activity Approved by HOD',
@@ -233,7 +233,7 @@ export const reviewActivityByHod = async (req, res) => {
       activity.status = 'REJECTED';
       activity.rejectionReason = notes || 'Not approved by HOD';
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: activity.coordinatorId._id,
         senderId: req.user._id,
         title: 'Activity Rejected',
@@ -245,7 +245,7 @@ export const reviewActivityByHod = async (req, res) => {
       activity.status = 'CHANGES_REQUIRED';
       activity.hodReviewNotes = notes || 'Modifications requested by HOD';
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: activity.coordinatorId._id,
         senderId: req.user._id,
         title: 'Activity Changes Requested',
@@ -342,6 +342,128 @@ export const getPublicActivityDetail = async (req, res) => {
         institution: 'R. C. Patel Institute of Technology, Shirpur (RCPIT)'
       }
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Edit Activity Details (With Time Slot Revalidation Safeguard - Requirement 16)
+export const updateActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const activity = await Activity.findById(id);
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
+
+    if (activity.isLocked && req.user.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, message: 'Historical Record Locked: Cannot edit locked activity record.' });
+    }
+
+    const userDeptId = (req.user.departmentId?._id || req.user.departmentId)?.toString();
+    const actDeptId = (activity.departmentId?._id || activity.departmentId)?.toString();
+
+    if (req.user.role === 'FACULTY' && activity.coordinatorId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to edit this activity.' });
+    }
+    if (req.user.role === 'HOD' && userDeptId !== actDeptId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to edit activity of another department.' });
+    }
+
+    const {
+      title, category, description, objectives, targetAudience, guestSpeaker,
+      date, startTime, endTime, durationHours, venueId, venueName,
+      expectedParticipants, estimatedBudget, fundingSource
+    } = req.body;
+
+    const newVenueId = venueId !== undefined ? venueId : activity.venueId;
+    const newDate = date ? new Date(date) : activity.date;
+    const newStartTime = startTime || activity.startTime;
+    const newEndTime = endTime || activity.endTime;
+
+    // Time Slot Revalidation if venue and schedule exist
+    if (newVenueId) {
+      const { checkVenueConflict } = await import('../utils/conflictDetector.js');
+      const conflictCheck = await checkVenueConflict({
+        venueId: newVenueId,
+        requestedDate: newDate,
+        startTime: newStartTime,
+        endTime: newEndTime,
+        excludeActivityId: activity._id
+      });
+
+      if (conflictCheck.hasConflict) {
+        return res.status(409).json({
+          success: false,
+          hasConflict: true,
+          message: conflictCheck.conflictDetails.conflictMessage || 'This time slot is already booked or conflicts with another event. Edit rejected.',
+          conflictDetails: conflictCheck.conflictDetails,
+          alternativeSlots: conflictCheck.alternativeSlots
+        });
+      }
+    }
+
+    if (title) activity.title = title;
+    if (category) activity.category = category;
+    if (description) activity.description = description;
+    if (objectives !== undefined) activity.objectives = objectives;
+    if (targetAudience) activity.targetAudience = targetAudience;
+    if (guestSpeaker) activity.guestSpeaker = guestSpeaker;
+    if (date) activity.date = newDate;
+    if (startTime) activity.startTime = newStartTime;
+    if (endTime) activity.endTime = newEndTime;
+    if (durationHours) activity.durationHours = Number(durationHours);
+    if (venueId !== undefined) activity.venueId = venueId;
+    if (venueName !== undefined) activity.venueName = venueName;
+    if (expectedParticipants !== undefined) activity.expectedParticipants = Number(expectedParticipants);
+    if (estimatedBudget !== undefined) activity.estimatedBudget = Number(estimatedBudget);
+    if (fundingSource) activity.fundingSource = fundingSource;
+
+    await activity.save();
+    await calculateCompletenessScore(activity._id);
+
+    await logAudit({ req, user: req.user, action: 'ACTIVITY_EDITED', entity: 'Activity', entityId: activity._id, details: `Title: ${activity.title}` });
+
+    res.json({ success: true, message: 'Activity updated successfully', activity });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Activity Budget & Expenses (Requirement 9)
+export const updateActivityBudget = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const activity = await Activity.findById(id);
+    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
+
+    const userDeptId = (req.user.departmentId?._id || req.user.departmentId)?.toString();
+    const actDeptId = (activity.departmentId?._id || activity.departmentId)?.toString();
+
+    if (req.user.role === 'HOD' && userDeptId !== actDeptId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to edit budget of another department.' });
+    }
+    if (req.user.role === 'FACULTY' && activity.coordinatorId.toString() !== req.user._id.toString() && userDeptId !== actDeptId) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to edit budget for this activity.' });
+    }
+
+    const { estimatedBudget, approvedBudget, actualExpenditure, fundingSource, budgetStatus, budgetCategories } = req.body;
+
+    if (estimatedBudget !== undefined) activity.estimatedBudget = Number(estimatedBudget);
+    if (approvedBudget !== undefined && ['HOD', 'ADMIN', 'DIRECTOR'].includes(req.user.role)) {
+      activity.approvedBudget = Number(approvedBudget);
+    }
+    if (actualExpenditure !== undefined) activity.actualExpenditure = Number(actualExpenditure);
+    if (fundingSource) activity.fundingSource = fundingSource;
+    if (budgetStatus && ['HOD', 'ADMIN', 'DIRECTOR'].includes(req.user.role)) {
+      activity.budgetStatus = budgetStatus;
+    }
+    if (Array.isArray(budgetCategories)) {
+      activity.budgetCategories = budgetCategories;
+    }
+
+    await activity.save();
+    await logAudit({ req, user: req.user, action: 'BUDGET_UPDATED', entity: 'Activity', entityId: activity._id, details: `Estimated: ₹${activity.estimatedBudget}, Approved: ₹${activity.approvedBudget}, Actual: ₹${activity.actualExpenditure}` });
+
+    res.json({ success: true, message: 'Activity budget updated successfully', activity });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

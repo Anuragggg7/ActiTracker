@@ -432,6 +432,9 @@ async function runUAT() {
       })
     }).then(r => r.json());
 
+    // Logout previous active session before re-authenticating with new password
+    await fetch(`${BASE_URL}/auth/logout`, { method: 'POST', headers: facultyHeaders });
+
     const reloginPassRes = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

@@ -56,6 +56,7 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
   if (!isOpen) return null;
 
   const handleSubmit = async (isDraft = false) => {
+    if (loading) return;
     if (!form.title || !form.description) {
       showToast('Please provide an activity title and description', 'warning');
       return;

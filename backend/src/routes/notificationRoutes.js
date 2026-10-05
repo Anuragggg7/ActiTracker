@@ -1,8 +1,11 @@
 import express from 'express';
-import { getMyNotifications, markNotificationAsRead, markAllNotificationsAsRead } from '../controllers/notificationController.js';
+import { getMyNotifications, markNotificationAsRead, markAllNotificationsAsRead, getPublicNotifications } from '../controllers/notificationController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+// Public institutional notifications (unauthenticated)
+router.get('/public', getPublicNotifications);
 
 router.use(protect);
 

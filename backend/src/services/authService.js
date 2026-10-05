@@ -75,7 +75,28 @@ export const authenticateUserService = async (identifier, password) => {
     throw new Error('Your account is currently inactive. Please contact System Administration.');
   }
 
+  // Active Session Check: Reject login if user is already logged in on an active session
+  if (user.activeSessionToken) {
+    try {
+      jwt.verify(user.activeSessionToken, process.env.JWT_SECRET || 'rcpit_activitytracker_jwt_secret_key_2026_super_secure');
+      // Token is valid; check if active within last 24 hours
+      const lastActive = user.lastActiveAt ? new Date(user.lastActiveAt).getTime() : 0;
+      const twentyFourHours = 24 * 60 * 60 * 1000;
+      if (Date.now() - lastActive < twentyFourHours) {
+        throw new Error('This user ID is already logged in. Please log out from the existing session before trying again.');
+      }
+    } catch (tokenErr) {
+      if (tokenErr.message.includes('already logged in')) {
+        throw tokenErr;
+      }
+      // If token expired or invalid, allow re-login and replace session token
+    }
+  }
+
   const token = generateToken(user._id);
+  user.activeSessionToken = token;
+  user.lastActiveAt = new Date();
+  await user.save();
 
   await logAudit({
     user,

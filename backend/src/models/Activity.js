@@ -60,9 +60,24 @@ const activitySchema = new mongoose.Schema(
     facultyParticipantsCount: { type: Number, default: 5 },
     externalParticipantsCount: { type: Number, default: 0 },
 
-    // Financial
+    // Financial & Detailed Budget
     estimatedBudget: { type: Number, default: 0 },
+    approvedBudget: { type: Number, default: 0 },
+    actualExpenditure: { type: Number, default: 0 },
     fundingSource: { type: String, default: 'Departmental Budget' },
+    budgetStatus: {
+      type: String,
+      enum: ['PROPOSED', 'APPROVED', 'REVISED', 'REJECTED'],
+      default: 'PROPOSED'
+    },
+    budgetCategories: [
+      {
+        categoryName: { type: String, required: true }, // e.g. Guest Honorarium, Refreshments, Printing, Travel
+        estimatedAmount: { type: Number, default: 0 },
+        actualAmount: { type: Number, default: 0 },
+        notes: { type: String, default: '' }
+      }
+    ],
 
     // Lifecycle Status
     status: {
@@ -110,5 +125,9 @@ const activitySchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+activitySchema.index({ departmentId: 1, status: 1 });
+activitySchema.index({ venueId: 1, date: 1, status: 1 });
+activitySchema.index({ coordinatorId: 1 });
 
 export default mongoose.model('Activity', activitySchema);

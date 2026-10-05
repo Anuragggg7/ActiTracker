@@ -16,9 +16,10 @@ export const checkForDuplicateActivity = async ({ title, departmentId, date, exc
 
   for (const act of departmentActivities) {
     const existingClean = act.title.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
+    const isSameDate = date && new Date(act.date).toDateString() === new Date(date).toDateString();
     
-    // Check title similarity or substring match
-    if (cleanTitle === existingClean || cleanTitle.includes(existingClean) || existingClean.includes(cleanTitle)) {
+    // Check exact title match or same title on same date
+    if (cleanTitle === existingClean || (isSameDate && cleanTitle === existingClean)) {
       return {
         isDuplicate: true,
         matchingActivity: {
@@ -27,7 +28,7 @@ export const checkForDuplicateActivity = async ({ title, departmentId, date, exc
           status: act.status,
           date: act.date
         },
-        message: `Similar activity "${act.title}" already exists in your department.`
+        message: `An activity titled "${act.title}" already exists in your department.`
       };
     }
   }

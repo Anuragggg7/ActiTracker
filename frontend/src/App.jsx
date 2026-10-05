@@ -22,6 +22,7 @@ import CentralCalendar from './pages/CentralCalendar';
 import AuditLogs from './pages/AuditLogs';
 import MediaCenter from './pages/MediaCenter';
 import NotificationsView from './pages/NotificationsView';
+import PublicNotifications from './pages/PublicNotifications';
 
 import Home from './pages/Home';
 
@@ -223,8 +224,17 @@ export function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="/public-notifications" element={<PublicNotifications />} />
 
-                {/* Detailed Activity View */}
+                {/* Detailed Activity & Event Views (Requirement 3 & 4) */}
+                <Route
+                  path="/events/:id"
+                  element={
+                    <ProtectedRoute>
+                      <ActivityDetail />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/activities/:id"
                   element={
@@ -257,6 +267,13 @@ export function App() {
                     </ProtectedRoute>
                   }
                 />
+
+                {/* Convenient Aliases for Refresh & Deep Links */}
+                <Route path="/events" element={<RootRedirect />} />
+                <Route path="/activities" element={<RootRedirect />} />
+                <Route path="/slots" element={<ProtectedRoute><SlotManagement /></ProtectedRoute>} />
+                <Route path="/users" element={<ProtectedRoute><UserManagement /></ProtectedRoute>} />
+                <Route path="/departments" element={<ProtectedRoute><DepartmentManagement /></ProtectedRoute>} />
 
                 {/* Central Root Redirect */}
                 <Route path="/" element={<RootRedirect />} />

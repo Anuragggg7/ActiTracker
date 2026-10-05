@@ -24,6 +24,9 @@ export const protect = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Your account has been suspended by Administration.' });
     }
 
+    // Update session timestamp asynchronously
+    User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).exec().catch(() => {});
+
     req.user = user;
     next();
   } catch (error) {

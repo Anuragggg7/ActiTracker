@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import mongoose from 'mongoose';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
@@ -80,7 +81,26 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api', pdfRoutes);
 
-// Catch-all 404 Handler for unmatched routes
+// Serve frontend static build if available (Production SPA Support - Requirement 4)
+const frontendDistPath = path.join(process.cwd(), '..', 'frontend', 'dist');
+const altFrontendDistPath = path.join(process.cwd(), 'frontend', 'dist');
+const distFolder = fs.existsSync(frontendDistPath)
+  ? frontendDistPath
+  : fs.existsSync(altFrontendDistPath)
+  ? altFrontendDistPath
+  : null;
+
+if (distFolder) {
+  app.use(express.static(distFolder));
+  app.get('*', (req, res, next) => {
+    if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
+      return next();
+    }
+    res.sendFile(path.join(distFolder, 'index.html'));
+  });
+}
+
+// Catch-all 404 Handler for unmatched API routes
 app.use((req, res) => {
   console.warn(`[404] No route matched: ${req.method} ${req.originalUrl}`);
   res.status(404).json({

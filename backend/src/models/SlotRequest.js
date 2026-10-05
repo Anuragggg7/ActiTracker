@@ -42,6 +42,9 @@ const slotRequestSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+slotRequestSchema.index({ venueId: 1, requestedDate: 1, status: 1 });
+slotRequestSchema.index({ activityId: 1 });
+
 slotRequestSchema.pre('save', function (next) {
   if (this.requestedDate && !this.date) this.date = this.requestedDate;
   if (this.date && !this.requestedDate) this.requestedDate = this.date;

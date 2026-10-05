@@ -72,7 +72,11 @@ const userSchema = new mongoose.Schema(
     approvedAt: { type: Date },
     
     // System flag
-    isSystemAdmin: { type: Boolean, default: false }
+    isSystemAdmin: { type: Boolean, default: false },
+
+    // Single Active Session State
+    activeSessionToken: { type: String, default: null },
+    lastActiveAt: { type: Date, default: Date.now }
   },
   { timestamps: true }
 );

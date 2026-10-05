@@ -72,6 +72,18 @@ export const ActivityDetail = () => {
   });
   const [submittingReport, setSubmittingReport] = useState(false);
 
+  // Budget Form State (Requirement 9)
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [budgetForm, setBudgetForm] = useState({
+    estimatedBudget: 0,
+    approvedBudget: 0,
+    actualExpenditure: 0,
+    fundingSource: 'Departmental Budget',
+    budgetStatus: 'PROPOSED',
+    budgetCategories: []
+  });
+  const [submittingBudget, setSubmittingBudget] = useState(false);
+
   // HOD Review Notes
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewActioning, setReviewActioning] = useState(false);
@@ -91,7 +103,17 @@ export const ActivityDetail = () => {
         api.get(`/activities/${id}/report`)
       ]);
 
-      if (actRes.success) setActivity(actRes.activity);
+      if (actRes.success && actRes.activity) {
+        setActivity(actRes.activity);
+        setBudgetForm({
+          estimatedBudget: actRes.activity.estimatedBudget || 0,
+          approvedBudget: actRes.activity.approvedBudget || 0,
+          actualExpenditure: actRes.activity.actualExpenditure || 0,
+          fundingSource: actRes.activity.fundingSource || 'Departmental Budget',
+          budgetStatus: actRes.activity.budgetStatus || 'PROPOSED',
+          budgetCategories: actRes.activity.budgetCategories || []
+        });
+      }
       if (mediaRes.success) setMedia(mediaRes.media || []);
       if (docRes.success) setDocuments(docRes.documents || []);
       if (attRes.success) setAttendance(attRes);
@@ -114,6 +136,23 @@ export const ActivityDetail = () => {
       showToast(err.message || 'Failed to fetch activity details', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBudgetUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmittingBudget(true);
+      const res = await api.put(`/activities/${id}/budget`, budgetForm);
+      if (res.success) {
+        showToast(res.message || 'Budget updated successfully', 'success');
+        setShowBudgetModal(false);
+        fetchActivityData();
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to update budget', 'error');
+    } finally {
+      setSubmittingBudget(false);
     }
   };
 
@@ -484,6 +523,7 @@ export const ActivityDetail = () => {
         {[
           { id: 'overview', label: 'Overview & Details', icon: FileText },
           { id: 'timeline', label: 'Timeline', icon: History },
+          { id: 'budget', label: 'Financial Budget', icon: DollarSign },
           { id: 'media', label: `Digital Album (${media.length})`, icon: Camera },
           { id: 'documents', label: `Documents (${documents.length})`, icon: FileText },
           { id: 'attendance', label: `Attendance (${attendance.stats.total})`, icon: Users },
@@ -557,6 +597,103 @@ export const ActivityDetail = () => {
                 </h4>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB: BUDGET (Requirement 9) */}
+      {activeTab === 'budget' && (
+        <div className="space-y-6">
+          <div className="glass-card p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-600" /> Activity Financial & Expenditure Record
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Stored directly in MongoDB master database record.
+                </p>
+              </div>
+
+              {['HOD', 'ADMIN', 'FACULTY'].includes(user?.role) && !activity.isLocked && (
+                <button
+                  onClick={() => setShowBudgetModal(true)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center gap-2 self-start sm:self-auto"
+                >
+                  Manage / Update Budget
+                </button>
+              )}
+            </div>
+
+            {/* Budget Key Metrics */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800 space-y-1">
+                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Estimated Budget</span>
+                <p className="text-xl font-black text-slate-900 dark:text-white">
+                  ₹{activity.estimatedBudget?.toLocaleString() || 0}
+                </p>
+                <span className="text-[10px] text-slate-400 block">{activity.fundingSource || 'Departmental'}</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60 space-y-1">
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold uppercase tracking-wider">Approved Budget</span>
+                <p className="text-xl font-black text-emerald-600 dark:text-emerald-400">
+                  ₹{activity.approvedBudget?.toLocaleString() || 0}
+                </p>
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-extrabold block uppercase">
+                  Status: {activity.budgetStatus || 'PROPOSED'}
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-amber-50/60 dark:bg-amber-950/40 border border-amber-200/60 dark:border-amber-800/60 space-y-1">
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold uppercase tracking-wider">Actual Expenditure</span>
+                <p className="text-xl font-black text-amber-600 dark:text-amber-400">
+                  ₹{activity.actualExpenditure?.toLocaleString() || 0}
+                </p>
+                <span className="text-[10px] text-slate-400 block">Logged Expenses</span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-sky-50/60 dark:bg-sky-950/40 border border-sky-200/60 dark:border-sky-800/60 space-y-1">
+                <span className="text-[10px] text-sky-600 dark:text-sky-400 font-bold uppercase tracking-wider">Remaining Balance</span>
+                <p className="text-xl font-black text-sky-600 dark:text-sky-400">
+                  ₹{((activity.approvedBudget || activity.estimatedBudget || 0) - (activity.actualExpenditure || 0)).toLocaleString()}
+                </p>
+                <span className="text-[10px] text-slate-400 block">Available Funds</span>
+              </div>
+            </div>
+
+            {/* Category Expenses Breakdown */}
+            <div className="space-y-3">
+              <h4 className="font-extrabold text-xs text-slate-900 dark:text-white uppercase tracking-wider">
+                Expense Head Breakdowns
+              </h4>
+              {!activity.budgetCategories || activity.budgetCategories.length === 0 ? (
+                <p className="text-xs text-slate-500 italic py-4">No itemized expense heads logged yet.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px]">
+                        <th className="pb-2 px-2">Expense Category</th>
+                        <th className="pb-2 px-2">Estimated (₹)</th>
+                        <th className="pb-2 px-2">Actual (₹)</th>
+                        <th className="pb-2 px-2">Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {activity.budgetCategories.map((cat, idx) => (
+                        <tr key={idx}>
+                          <td className="py-2.5 px-2 font-bold text-slate-900 dark:text-white">{cat.categoryName}</td>
+                          <td className="py-2.5 px-2 text-slate-600 dark:text-slate-400">₹{cat.estimatedAmount?.toLocaleString()}</td>
+                          <td className="py-2.5 px-2 font-bold text-emerald-600">₹{cat.actualAmount?.toLocaleString()}</td>
+                          <td className="py-2.5 px-2 text-slate-400">{cat.notes || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1107,6 +1244,90 @@ export const ActivityDetail = () => {
                 <p className="text-[11px] text-slate-400">{media[selectedMediaIndex].mediaType} • {new Date(media[selectedMediaIndex].createdAt).toLocaleString()}</p>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manage Budget Modal (Requirement 9) */}
+      {showBudgetModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                <DollarSign className="w-5 h-5 text-emerald-600" /> Manage Financial Budget
+              </h3>
+              <button onClick={() => setShowBudgetModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white">✕</button>
+            </div>
+
+            <form onSubmit={handleBudgetUpdate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Estimated Budget (₹)</label>
+                  <input
+                    type="number"
+                    required
+                    value={budgetForm.estimatedBudget}
+                    onChange={(e) => setBudgetForm({ ...budgetForm, estimatedBudget: Number(e.target.value) })}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Funding Source</label>
+                  <input
+                    type="text"
+                    value={budgetForm.fundingSource}
+                    onChange={(e) => setBudgetForm({ ...budgetForm, fundingSource: e.target.value })}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                  />
+                </div>
+              </div>
+
+              {['HOD', 'ADMIN', 'DIRECTOR'].includes(user?.role) && (
+                <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                  <div>
+                    <label className="block font-bold text-emerald-600 dark:text-emerald-400 mb-1">Approved Budget (₹)</label>
+                    <input
+                      type="number"
+                      value={budgetForm.approvedBudget}
+                      onChange={(e) => setBudgetForm({ ...budgetForm, approvedBudget: Number(e.target.value) })}
+                      className="w-full p-2.5 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-700 font-black text-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Budget Status</label>
+                    <select
+                      value={budgetForm.budgetStatus}
+                      onChange={(e) => setBudgetForm({ ...budgetForm, budgetStatus: e.target.value })}
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold"
+                    >
+                      <option value="PROPOSED">PROPOSED</option>
+                      <option value="APPROVED">APPROVED</option>
+                      <option value="REVISED">REVISED</option>
+                      <option value="REJECTED">REJECTED</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+                <label className="block font-bold text-amber-600 dark:text-amber-400 mb-1">Actual Expenditure Logged (₹)</label>
+                <input
+                  type="number"
+                  value={budgetForm.actualExpenditure}
+                  onChange={(e) => setBudgetForm({ ...budgetForm, actualExpenditure: Number(e.target.value) })}
+                  className="w-full p-2.5 rounded-xl bg-amber-50/50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 font-black text-amber-600"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button type="button" onClick={() => setShowBudgetModal(false)} className="px-4 py-2 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl text-slate-700 dark:text-slate-300">
+                  Cancel
+                </button>
+                <button type="submit" disabled={submittingBudget} className="px-5 py-2 bg-emerald-600 text-white font-extrabold rounded-xl shadow-lg">
+                  {submittingBudget ? 'Saving...' : 'Save Financial Budget'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

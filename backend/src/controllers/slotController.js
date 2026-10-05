@@ -41,7 +41,7 @@ export const createSlotRequest = async (req, res) => {
     await activity.save();
 
     // Notify Admin
-    await Notification.create({
+    await Notification.createIdempotent({
       recipientId: req.user._id, // Will also notify Admin via system query
       title: conflictCheck.hasConflict ? 'Slot Request Conflict Warning' : 'Slot Request Submitted',
       message: conflictCheck.hasConflict
@@ -79,6 +79,28 @@ export const reviewSlotRequest = async (req, res) => {
     const activity = await Activity.findById(targetActId);
 
     if (action === 'APPROVE') {
+      // Server-side final concurrency check
+      const finalCheck = await checkVenueConflict({
+        venueId: slotReq.venueId?._id || slotReq.venueId,
+        requestedDate: slotReq.requestedDate || slotReq.date,
+        startTime: slotReq.startTime,
+        endTime: slotReq.endTime,
+        excludeSlotRequestId: slotReq._id,
+        excludeActivityId: targetActId
+      });
+
+      if (finalCheck.hasConflict) {
+        slotReq.status = 'CONFLICT_DETECTED';
+        slotReq.conflictDetails = finalCheck.conflictDetails;
+        slotReq.suggestedAlternatives = finalCheck.alternativeSlots;
+        await slotReq.save();
+        return res.status(409).json({
+          success: false,
+          message: `Cannot approve: ${finalCheck.conflictDetails.conflictMessage || 'This time slot is already booked.'}`,
+          hasConflict: true
+        });
+      }
+
       slotReq.status = 'APPROVED';
       slotReq.reviewedBy = req.user._id;
       slotReq.adminNotes = adminNotes || 'Slot approved by Admin';
@@ -97,7 +119,7 @@ export const reviewSlotRequest = async (req, res) => {
       const recipientId = slotReq.requestedBy?._id || slotReq.requestedBy;
       const vName = slotReq.venueId?.name || activity?.venueName || 'Assigned Venue';
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId,
         senderId: req.user._id,
         title: 'Slot Approved & Scheduled',
@@ -124,7 +146,7 @@ export const reviewSlotRequest = async (req, res) => {
 
       const recipientId = slotReq.requestedBy?._id || slotReq.requestedBy;
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId,
         senderId: req.user._id,
         title: 'Alternative Slot Assigned & Scheduled',

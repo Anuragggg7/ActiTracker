@@ -199,7 +199,15 @@ export const Navbar = ({ onOpenSearch }) => {
                     onClick={() => setShowUserMenu(false)}
                     className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
                   >
-                    <Bell className="w-4 h-4 text-slate-400" /> Notifications
+                    <Bell className="w-4 h-4 text-slate-400" /> My Notifications
+                  </Link>
+
+                  <Link
+                    to="/public-notifications"
+                    onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl font-medium"
+                  >
+                    <Shield className="w-4 h-4 text-rcpit-600" /> Public Circulars
                   </Link>
 
                   <button

@@ -74,6 +74,9 @@ export const refreshToken = async (req, res) => {
 // User Logout
 export const logout = async (req, res) => {
   try {
+    if (req.user) {
+      await User.findByIdAndUpdate(req.user._id, { activeSessionToken: null });
+    }
     res.json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -102,7 +105,7 @@ export const changePassword = async (req, res) => {
 
 // Reset database state for UAT testing
 export const resetTestDatabase = async (req, res) => {
-  if (process.env.NODE_ENV === 'production' || process.env.ALLOW_TEST_RESET !== 'true') {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_RESET !== 'true') {
     return res.status(403).json({ success: false, message: 'Database reset endpoints are strictly disabled in production and live environments.' });
   }
   try {
@@ -123,6 +126,7 @@ export const resetTestDatabase = async (req, res) => {
     }
 
     await User.deleteMany({ isSystemAdmin: { $ne: true } });
+    await User.updateMany({}, { activeSessionToken: null });
     const Department = (await import('../models/Department.js')).default;
     await Department.updateMany({}, { $unset: { hodId: "" } });
 

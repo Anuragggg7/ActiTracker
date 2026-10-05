@@ -94,7 +94,7 @@ export const submitActivityReport = async (req, res) => {
       await activity.save();
 
       // Trigger HOD Notification
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: activity.hodId || activity.departmentId,
         recipientRole: 'HOD',
         title: `Post-Event Report Submitted: "${activity.title}"`,
@@ -157,7 +157,7 @@ export const verifyActivityReport = async (req, res) => {
       activity.isLocked = true;
       await activity.save();
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: report.submittedBy,
         title: `Report Verified & Activity Completed: "${activity.title}"`,
         message: `Your post-event report for "${activity.title}" has been verified by HOD. The activity is now COMPLETED.`,
@@ -175,7 +175,7 @@ export const verifyActivityReport = async (req, res) => {
       activity.status = 'CHANGES_REQUIRED';
       await activity.save();
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: report.submittedBy,
         title: `Changes Requested on Report: "${activity.title}"`,
         message: `HOD requested changes on your report. Feedback: "${notes}"`,
@@ -193,7 +193,7 @@ export const verifyActivityReport = async (req, res) => {
       activity.status = 'REJECTED';
       await activity.save();
 
-      await Notification.create({
+      await Notification.createIdempotent({
         recipientId: report.submittedBy,
         title: `Report Rejected: "${activity.title}"`,
         message: `Your post-event report for "${activity.title}" was rejected by HOD. Reason: "${notes}"`,
