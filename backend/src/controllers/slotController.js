@@ -1,181 +1,133 @@
 import SlotRequest from '../models/SlotRequest.js';
-import Activity from '../models/Activity.js';
 import Venue from '../models/Venue.js';
-import Notification from '../models/Notification.js';
-import { checkVenueConflict } from '../utils/conflictDetector.js';
 import { logAudit } from '../utils/auditLogger.js';
+import {
+  checkSlotAvailability,
+  getVenueScheduleService,
+  createSlotRequestService,
+  reviewSlotRequestService,
+  SlotConflictError
+} from '../services/slotService.js';
 
-// Create Slot Request
+// GET /api/slots/availability
+export const checkAvailabilityController = async (req, res) => {
+  try {
+    const { venueId, date, requestedDate, startTime, endTime, excludeActivityId, excludeSlotRequestId } = req.query;
+    const targetDate = date || requestedDate;
+
+    const result = await checkSlotAvailability({
+      venueId,
+      requestedDate: targetDate,
+      startTime,
+      endTime,
+      excludeActivityId,
+      excludeSlotRequestId
+    });
+
+    if (!result.available) {
+      return res.status(409).json({
+        success: false,
+        available: false,
+        code: 'SLOT_ALREADY_BOOKED',
+        message: 'This time slot has been booked already!',
+        conflictDetails: result.conflictDetails,
+        alternativeSlots: result.alternativeSlots
+      });
+    }
+
+    res.json({
+      success: true,
+      available: true,
+      message: 'Time slot is available'
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/slots/venue-schedule
+export const getVenueScheduleController = async (req, res) => {
+  try {
+    const { venueId, date, requestedDate } = req.query;
+    const targetDate = date || requestedDate;
+
+    const schedule = await getVenueScheduleService(venueId, targetDate);
+    res.json({ success: true, ...schedule });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/slots/requests - Create Slot Request with Atomic FCFS
 export const createSlotRequest = async (req, res) => {
   try {
-    const { activityId, venueId, requestedDate, startTime, endTime } = req.body;
+    const { activityId, venueId, requestedDate, date, startTime, endTime } = req.body;
+    const targetDate = requestedDate || date;
 
-    const activity = await Activity.findById(activityId);
-    if (!activity) return res.status(404).json({ success: false, message: 'Activity not found' });
-
-    // Check venue conflict
-    const conflictCheck = await checkVenueConflict({
-      venueId,
-      requestedDate,
-      startTime,
-      endTime,
-      excludeActivityId: activityId
-    });
-
-    const slotReq = await SlotRequest.create({
+    const slotReq = await createSlotRequestService({
       activityId,
-      requestedBy: req.user._id,
       venueId,
-      requestedDate: new Date(requestedDate),
+      requestedDate: targetDate,
       startTime,
       endTime,
-      status: conflictCheck.hasConflict ? 'CONFLICT_DETECTED' : 'PENDING',
-      conflictDetails: conflictCheck.conflictDetails,
-      suggestedAlternatives: conflictCheck.alternativeSlots
+      reqUser: req.user,
+      req
     });
-
-    activity.status = 'SLOT_REQUESTED';
-    activity.venueId = venueId;
-    const venue = await Venue.findById(venueId);
-    if (venue) activity.venueName = venue.name;
-    await activity.save();
-
-    // Notify Admin
-    await Notification.createIdempotent({
-      recipientId: req.user._id, // Will also notify Admin via system query
-      title: conflictCheck.hasConflict ? 'Slot Request Conflict Warning' : 'Slot Request Submitted',
-      message: conflictCheck.hasConflict
-        ? `Conflict detected for "${activity.title}". Admin will verify alternative slots.`
-        : `Slot request for "${activity.title}" sent to Admin for verification.`,
-      category: 'Slot',
-      priority: conflictCheck.hasConflict ? 'HIGH' : 'MEDIUM'
-    });
-
-    await logAudit({ req, user: req.user, action: 'SLOT_REQUESTED', entity: 'SlotRequest', entityId: slotReq._id, details: `Activity: ${activity.title}` });
 
     res.status(201).json({
       success: true,
-      message: conflictCheck.hasConflict
-        ? 'Slot request created but scheduling conflict detected. Admin will review alternative slots.'
-        : 'Slot request submitted successfully to Admin.',
-      slotRequest: slotReq,
-      hasConflict: conflictCheck.hasConflict
+      message: 'Slot request submitted successfully to Admin.',
+      slotRequest: slotReq
     });
   } catch (error) {
+    if (error instanceof SlotConflictError || error.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_ALREADY_BOOKED',
+        message: 'This time slot has been booked already!',
+        conflictDetails: error.conflictDetails,
+        alternativeSlots: error.alternativeSlots
+      });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Admin Review Slot Request (Approve / Reject / Suggest Alternative)
+// PUT /api/slots/requests/:id/review or /api/slots/review/:id - Review Slot Request with Atomic FCFS
 export const reviewSlotRequest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, selectedAlternativeIndex, adminNotes } = req.body; // 'APPROVE', 'REJECT', 'APPLY_ALTERNATIVE'
+    const { action, selectedAlternativeIndex, adminNotes } = req.body;
 
-    const slotReq = await SlotRequest.findById(id).populate('activityId venueId requestedBy');
-    if (!slotReq) return res.status(404).json({ success: false, message: 'Slot request not found' });
+    const slotReq = await reviewSlotRequestService({
+      requestId: id,
+      action,
+      adminNotes,
+      selectedAlternativeIndex,
+      reqUser: req.user,
+      req
+    });
 
-    const targetActId = slotReq.activityId?._id || slotReq.activityId;
-    const activity = await Activity.findById(targetActId);
-
-    if (action === 'APPROVE') {
-      // Server-side final concurrency check
-      const finalCheck = await checkVenueConflict({
-        venueId: slotReq.venueId?._id || slotReq.venueId,
-        requestedDate: slotReq.requestedDate || slotReq.date,
-        startTime: slotReq.startTime,
-        endTime: slotReq.endTime,
-        excludeSlotRequestId: slotReq._id,
-        excludeActivityId: targetActId
-      });
-
-      if (finalCheck.hasConflict) {
-        slotReq.status = 'CONFLICT_DETECTED';
-        slotReq.conflictDetails = finalCheck.conflictDetails;
-        slotReq.suggestedAlternatives = finalCheck.alternativeSlots;
-        await slotReq.save();
-        return res.status(409).json({
-          success: false,
-          message: `Cannot approve: ${finalCheck.conflictDetails.conflictMessage || 'This time slot is already booked.'}`,
-          hasConflict: true
-        });
-      }
-
-      slotReq.status = 'APPROVED';
-      slotReq.reviewedBy = req.user._id;
-      slotReq.adminNotes = adminNotes || 'Slot approved by Admin';
-      slotReq.reviewedAt = new Date();
-
-      if (activity) {
-        activity.status = 'SCHEDULED';
-        activity.venueId = slotReq.venueId?._id || slotReq.venueId;
-        activity.venueName = slotReq.venueId?.name || 'Assigned Venue';
-        activity.date = slotReq.requestedDate || slotReq.date;
-        activity.startTime = slotReq.startTime;
-        activity.endTime = slotReq.endTime;
-        await activity.save();
-      }
-
-      const recipientId = slotReq.requestedBy?._id || slotReq.requestedBy;
-      const vName = slotReq.venueId?.name || activity?.venueName || 'Assigned Venue';
-
-      await Notification.createIdempotent({
-        recipientId,
-        senderId: req.user._id,
-        title: 'Slot Approved & Scheduled',
-        message: `Your slot request for "${activity?.title || 'Activity'}" at ${vName} on ${new Date(slotReq.requestedDate || slotReq.date).toLocaleDateString()} has been APPROVED!`,
-        category: 'Slot',
-        priority: 'HIGH'
-      });
-    } else if (action === 'APPLY_ALTERNATIVE' && slotReq.suggestedAlternatives[selectedAlternativeIndex]) {
-      const alt = slotReq.suggestedAlternatives[selectedAlternativeIndex];
-      slotReq.venueId = alt.venueId || slotReq.venueId;
-      slotReq.requestedDate = alt.date;
-      slotReq.startTime = alt.startTime;
-      slotReq.endTime = alt.endTime;
-      slotReq.status = 'APPROVED';
-      slotReq.adminNotes = adminNotes || 'Alternative slot applied by Admin';
-
-      if (activity) {
-        activity.status = 'SCHEDULED';
-        activity.date = alt.date;
-        activity.startTime = alt.startTime;
-        activity.endTime = alt.endTime;
-        await activity.save();
-      }
-
-      const recipientId = slotReq.requestedBy?._id || slotReq.requestedBy;
-
-      await Notification.createIdempotent({
-        recipientId,
-        senderId: req.user._id,
-        title: 'Alternative Slot Assigned & Scheduled',
-        message: `An alternative slot for "${activity?.title || 'Activity'}" has been assigned for ${new Date(alt.date).toLocaleDateString()} (${alt.startTime} - ${alt.endTime}).`,
-        category: 'Slot',
-        priority: 'HIGH'
-      });
-    } else if (action === 'REJECT') {
-      slotReq.status = 'REJECTED';
-      slotReq.adminNotes = adminNotes || 'Slot request rejected due to venue unavailability';
-
-      if (activity) {
-        activity.status = 'CHANGES_REQUIRED';
-        activity.adminSlotNotes = adminNotes;
-        await activity.save();
-      }
-    }
-
-    await slotReq.save();
-
-    await logAudit({ req, user: req.user, action: `ADMIN_SLOT_${action}`, entity: 'SlotRequest', entityId: slotReq._id, details: adminNotes });
-
-    res.json({ success: true, message: `Slot request ${action.toLowerCase()}d successfully`, slotRequest: slotReq });
+    res.json({
+      success: true,
+      message: `Slot request ${action.toLowerCase()}d successfully`,
+      slotRequest: slotReq
+    });
   } catch (error) {
+    if (error instanceof SlotConflictError || error.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_ALREADY_BOOKED',
+        message: 'This time slot has been booked already!',
+        conflictDetails: error.conflictDetails,
+        alternativeSlots: error.alternativeSlots
+      });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// List Slot Requests (Admin / Faculty / HOD)
+// GET /api/slots/requests
 export const getSlotRequests = async (req, res) => {
   try {
     const { status } = req.query;
@@ -190,13 +142,13 @@ export const getSlotRequests = async (req, res) => {
       .populate('venueId requestedBy reviewedBy')
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, count: slotRequests.length, slotRequests });
+    res.json({ success: true, count: slotRequests.length, requests: slotRequests, slotRequests });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// Venue CRUD (Admin & Viewing for all)
+// Venue CRUD
 export const getVenues = async (req, res) => {
   try {
     const venues = await Venue.find({}).sort({ name: 1 });

@@ -1,8 +1,32 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api/client';
 import { useNotifications } from '../context/NotificationContext';
-import { Plus, X, Upload, Calendar, MapPin, Film, Image as ImageIcon, Video, Clock, DollarSign, Users, Award, FileText, CheckCircle2 } from 'lucide-react';
+import { Plus, X, Calendar, MapPin, Image as ImageIcon, Video, Clock, CheckCircle2, AlertTriangle, XCircle } from 'lucide-react';
 import { fetchDepartmentsWithFallback } from '../utils/departments';
+
+const STANDARD_TIME_SLOTS = [
+  { startTime: '09:00', endTime: '10:00', label: '09:00 AM - 10:00 AM' },
+  { startTime: '10:00', endTime: '11:00', label: '10:00 AM - 11:00 AM' },
+  { startTime: '11:00', endTime: '12:00', label: '11:00 AM - 12:00 PM' },
+  { startTime: '12:00', endTime: '13:00', label: '12:00 PM - 01:00 PM' },
+  { startTime: '13:00', endTime: '14:00', label: '01:00 PM - 02:00 PM' },
+  { startTime: '14:00', endTime: '15:00', label: '02:00 PM - 03:00 PM' },
+  { startTime: '15:00', endTime: '16:00', label: '03:00 PM - 04:00 PM' },
+  { startTime: '16:00', endTime: '17:00', label: '04:00 PM - 05:00 PM' }
+];
+
+function isOverlapping(startA, endA, startB, endB) {
+  if (!startA || !endA || !startB || !endB) return false;
+  const toMins = (t) => {
+    const parts = t.split(':').map(Number);
+    return (parts[0] || 0) * 60 + (parts[1] || 0);
+  };
+  const aStart = toMins(startA);
+  const aEnd = toMins(endA);
+  const bStart = toMins(startB);
+  const bEnd = toMins(endB);
+  return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
+}
 
 export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
   const { showToast } = useNotifications();
@@ -10,6 +34,8 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
   const [departments, setDepartments] = useState([]);
   const [venues, setVenues] = useState([]);
+  const [occupiedSlots, setOccupiedSlots] = useState([]);
+  const [slotChecking, setSlotChecking] = useState(false);
 
   // Form State
   const [form, setForm] = useState({
@@ -52,6 +78,30 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
     };
     fetchMasters();
   }, [isOpen]);
+
+  const fetchVenueSchedule = async (venueId, dateStr) => {
+    if (!venueId || !dateStr) {
+      setOccupiedSlots([]);
+      return;
+    }
+    try {
+      setSlotChecking(true);
+      const res = await api.get(`/slots/venue-schedule?venueId=${venueId}&date=${dateStr}`);
+      if (res.success) {
+        setOccupiedSlots(res.occupiedSlots || []);
+      }
+    } catch (err) {
+      console.error('Venue schedule error:', err);
+    } finally {
+      setSlotChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    if (form.venueId && form.date) {
+      fetchVenueSchedule(form.venueId, form.date);
+    }
+  }, [form.venueId, form.date]);
 
   if (!isOpen) return null;
 
@@ -112,7 +162,16 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
         if (onSuccess) onSuccess();
       }
     } catch (err) {
-      showToast(err.message || 'Failed to create activity', 'error');
+      const errMsg = err.response?.data?.message || err.message || 'Failed to create activity';
+      if (err.status === 409 || err.response?.status === 409 || errMsg.includes('booked already')) {
+        showToast('This time slot has been booked already!', 'error');
+        if (form.venueId && form.date) {
+          fetchVenueSchedule(form.venueId, form.date);
+        }
+        setStep(2);
+      } else {
+        showToast(errMsg, 'error');
+      }
     } finally {
       setLoading(false);
     }
@@ -212,7 +271,7 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
 
         {/* STEP 2: Schedule & Venue */}
         {step === 2 && (
-          <div className="space-y-3 text-xs">
+          <div className="space-y-4 text-xs">
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Event Date</label>
@@ -251,7 +310,7 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
                   const sel = venues.find(v => v._id === e.target.value);
                   setForm({ ...form, venueId: e.target.value, venueName: sel ? sel.name : '' });
                 }}
-                className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
+                className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white font-semibold"
               >
                 <option value="">Choose Institutional Venue</option>
                 {venues.map(v => (
@@ -259,6 +318,47 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
                 ))}
               </select>
             </div>
+
+            {/* Visual Real-Time Slot Availability Matrix */}
+            {form.venueId && (
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                    <Clock className="w-4 h-4 text-rcpit-600" /> Real-Time Venue Slot Matrix ({form.date})
+                  </span>
+                  {slotChecking && <span className="text-[10px] text-amber-500 animate-pulse">Fetching MongoDB availability...</span>}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {STANDARD_TIME_SLOTS.map((slot) => {
+                    const isBooked = occupiedSlots.some(occ => isOverlapping(slot.startTime, slot.endTime, occ.startTime, occ.endTime));
+                    const isSelected = form.startTime === slot.startTime && form.endTime === slot.endTime;
+
+                    return (
+                      <button
+                        key={slot.label}
+                        type="button"
+                        disabled={isBooked}
+                        onClick={() => setForm({ ...form, startTime: slot.startTime, endTime: slot.endTime })}
+                        className={`p-2.5 rounded-xl border text-[11px] font-bold text-center transition-all flex flex-col items-center justify-between gap-1 ${
+                          isBooked ? 'bg-slate-200 dark:bg-slate-900 border-slate-300 dark:border-slate-800 text-slate-400 cursor-not-allowed opacity-60' :
+                          isSelected ? 'bg-rcpit-600 text-white border-rcpit-700 shadow-md ring-2 ring-rcpit-400' :
+                          'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
+                        }`}
+                      >
+                        <span className="text-[10px] tracking-tight">{slot.label}</span>
+                        <span className={`px-2 py-0.5 rounded-md text-[9px] uppercase font-black tracking-wider ${
+                          isBooked ? 'bg-slate-300 dark:bg-slate-800 text-slate-600 dark:text-slate-400' :
+                          isSelected ? 'bg-white/30 text-white' : 'bg-emerald-200 dark:bg-emerald-900 text-emerald-900 dark:text-emerald-200'
+                        }`}>
+                          {isBooked ? 'BOOKED' : isSelected ? 'SELECTED' : 'AVAILABLE'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -283,7 +383,7 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
           </div>
         )}
 
-        {/* STEP 3: Photos (JPG/PNG) & Video (MP4/WebM) Attachment */}
+        {/* STEP 3: Photos & Video Attachment */}
         {step === 3 && (
           <div className="space-y-4 text-xs">
             <div className="p-4 rounded-2xl border border-rcpit-200 dark:border-slate-700 bg-rcpit-50/50 dark:bg-slate-800/40 space-y-3">
@@ -369,7 +469,7 @@ export const CreateActivityModal = ({ isOpen, onClose, onSuccess }) => {
                 type="button"
                 onClick={() => handleSubmit(false)}
                 disabled={loading}
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow disabled:opacity-50"
               >
                 {loading ? 'Submitting Activity...' : 'Submit & Upload Activity'}
               </button>

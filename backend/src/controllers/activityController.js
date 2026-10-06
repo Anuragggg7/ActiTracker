@@ -8,6 +8,7 @@ import ActivityReport from '../models/ActivityReport.js';
 import { checkForDuplicateActivity } from '../utils/duplicateChecker.js';
 import { calculateCompletenessScore } from '../utils/completenessCalculator.js';
 import { logAudit } from '../utils/auditLogger.js';
+import { validateAndLockVenueBooking, SlotConflictError } from '../services/slotService.js';
 
 // State Machine Transition Rules
 const ALLOWED_TRANSITIONS = {
@@ -55,6 +56,17 @@ export const createActivity = async (req, res) => {
           message: dupCheck.message
         });
       }
+    }
+
+    if (venueId) {
+      await validateAndLockVenueBooking({
+        venueId,
+        date,
+        startTime,
+        endTime,
+        reqUser: req.user,
+        req
+      });
     }
 
     const status = isDraft ? 'DRAFT' : 'SUBMITTED';
@@ -108,6 +120,15 @@ export const createActivity = async (req, res) => {
       activity
     });
   } catch (error) {
+    if (error instanceof SlotConflictError || error.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_ALREADY_BOOKED',
+        message: 'This time slot has been booked already!',
+        conflictDetails: error.conflictDetails,
+        alternativeSlots: error.alternativeSlots
+      });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -381,24 +402,15 @@ export const updateActivity = async (req, res) => {
 
     // Time Slot Revalidation if venue and schedule exist
     if (newVenueId) {
-      const { checkVenueConflict } = await import('../utils/conflictDetector.js');
-      const conflictCheck = await checkVenueConflict({
+      await validateAndLockVenueBooking({
         venueId: newVenueId,
-        requestedDate: newDate,
+        date: newDate,
         startTime: newStartTime,
         endTime: newEndTime,
-        excludeActivityId: activity._id
+        excludeActivityId: activity._id,
+        reqUser: req.user,
+        req
       });
-
-      if (conflictCheck.hasConflict) {
-        return res.status(409).json({
-          success: false,
-          hasConflict: true,
-          message: conflictCheck.conflictDetails.conflictMessage || 'This time slot is already booked or conflicts with another event. Edit rejected.',
-          conflictDetails: conflictCheck.conflictDetails,
-          alternativeSlots: conflictCheck.alternativeSlots
-        });
-      }
     }
 
     if (title) activity.title = title;
@@ -424,6 +436,15 @@ export const updateActivity = async (req, res) => {
 
     res.json({ success: true, message: 'Activity updated successfully', activity });
   } catch (error) {
+    if (error instanceof SlotConflictError || error.statusCode === 409) {
+      return res.status(409).json({
+        success: false,
+        code: 'SLOT_ALREADY_BOOKED',
+        message: 'This time slot has been booked already!',
+        conflictDetails: error.conflictDetails,
+        alternativeSlots: error.alternativeSlots
+      });
+    }
     res.status(500).json({ success: false, message: error.message });
   }
 };

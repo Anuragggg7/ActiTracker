@@ -1,5 +1,7 @@
 import express from 'express';
 import {
+  checkAvailabilityController,
+  getVenueScheduleController,
   createSlotRequest,
   reviewSlotRequest,
   getSlotRequests,
@@ -12,6 +14,9 @@ import { protect, authorize } from '../middleware/authMiddleware.js';
 const router = express.Router();
 
 router.use(protect);
+
+router.get('/availability', checkAvailabilityController);
+router.get('/venue-schedule', getVenueScheduleController);
 
 router.get('/venues', getVenues);
 router.post('/venues', authorize('ADMIN'), createVenue);

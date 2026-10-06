@@ -52,11 +52,17 @@ export const SlotManagement = () => {
     try {
       const res = await api.put(`/slots/review/${requestId}`, { action, adminNotes });
       if (res.success) {
-        showToast(`Slot request ${action.toLowerCase()} successfully`, 'success');
+        showToast(`Slot request ${action.toLowerCase()}d successfully`, 'success');
         fetchSlotData();
       }
     } catch (err) {
-      showToast(err.message || 'Slot review failed', 'error');
+      const errMsg = err.response?.data?.message || err.message || 'Slot review failed';
+      if (err.status === 409 || err.response?.status === 409 || errMsg.includes('booked already')) {
+        showToast('This time slot has been booked already!', 'error');
+      } else {
+        showToast(errMsg, 'error');
+      }
+      fetchSlotData();
     }
   };
 
