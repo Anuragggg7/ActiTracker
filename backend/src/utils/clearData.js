@@ -34,7 +34,7 @@ export const clearDatabase = async () => {
     await Notification.deleteMany({});
     await AuditLog.deleteMany({});
     await Venue.deleteMany({});
-    
+
     // Clear non-system-admin users
     await User.deleteMany({ isSystemAdmin: { $ne: true } });
 
@@ -53,7 +53,7 @@ export const clearDatabase = async () => {
   } finally {
     mongoose.disconnect();
   }
-if (process.argv[1] && (process.argv[1].endsWith('clearData.js') || process.argv[1].includes('clearData'))) {
-  clearDatabase();
+  if (process.argv[1] && (process.argv[1].endsWith('clearData.js') || process.argv[1].includes('clearData'))) {
+    clearDatabase();
+  }
 }
-

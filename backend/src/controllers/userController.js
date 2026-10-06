@@ -4,7 +4,8 @@ import {
   toggleFacultyStatusService,
   resetFacultyPasswordService,
   getAllUsersService,
-  getFacultyByIdService
+  getFacultyByIdService,
+  forceLogoutUserService
 } from '../services/userService.js';
 import User from '../models/User.js';
 import Department from '../models/Department.js';
@@ -235,3 +236,14 @@ export const reviewFacultyRegistration = async (req, res) => {
 export const approveFaculty = reviewFacultyRegistration;
 export const rejectFaculty = reviewFacultyRegistration;
 export const requestChangesFaculty = reviewFacultyRegistration;
+
+// Admin Forces Logout for a Specific User Account
+export const forceLogoutUser = async (req, res) => {
+  try {
+    const userId = req.params.userId || req.params.id || req.params.facultyId;
+    const result = await forceLogoutUserService(req.user, userId);
+    res.json(result);
+  } catch (error) {
+    res.status(400).json({ success: false, message: error.message });
+  }
+};

@@ -328,3 +328,34 @@ export const getFacultyByIdService = async (id) => {
   }
   return user;
 };
+
+/**
+ * Admin Forces Logout for a Specific User Account
+ */
+export const forceLogoutUserService = async (adminUser, userId) => {
+  const targetUser = await User.findById(userId);
+  if (!targetUser) {
+    throw new Error('User record not found.');
+  }
+
+  if (targetUser._id.toString() === adminUser._id.toString()) {
+    throw new Error('System Policy Violation: Cannot force log out your own current Admin session via Admin Controls.');
+  }
+
+  targetUser.activeSessionToken = null;
+  targetUser.lastActiveAt = new Date(0);
+  await targetUser.save();
+
+  await logAudit({
+    user: adminUser,
+    action: 'ADMIN_FORCE_LOGOUT_USER',
+    entity: 'User',
+    entityId: targetUser._id,
+    details: `Admin ${adminUser.name} forcibly terminated session for user ${targetUser.name} (${targetUser.employeeId || targetUser.email})`
+  });
+
+  return {
+    success: true,
+    message: `Active session for ${targetUser.name} (${targetUser.employeeId || targetUser.email}) has been terminated successfully.`
+  };
+};

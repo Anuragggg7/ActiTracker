@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import {
   Users, Search, UserPlus, Shield, Edit, KeyRound, CheckCircle,
-  XCircle, Lock, Building, Filter, RefreshCw
+  XCircle, Lock, Building, Filter, RefreshCw, LogOut
 } from 'lucide-react';
 
 export const UserManagement = () => {
@@ -171,6 +171,28 @@ export const UserManagement = () => {
       }
     } catch (err) {
       showToast(err.message || 'Failed to toggle account status', 'error');
+    }
+  };
+
+  // Handle Force Logout
+  const handleForceLogout = async (targetUser) => {
+    if (targetUser._id === user?._id || targetUser.role === 'ADMIN') {
+      showToast('Cannot force log out current System Admin session.', 'error');
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to forcibly log out ${targetUser.name} (${targetUser.employeeId || targetUser.email})?`)) {
+      return;
+    }
+
+    try {
+      const res = await api.post(`/users/${targetUser._id}/force-logout`);
+      if (res.success) {
+        showToast(res.message || `Session terminated for ${targetUser.name}`, 'success');
+        fetchData();
+      }
+    } catch (err) {
+      showToast(err.message || 'Failed to force log out user session', 'error');
     }
   };
 
@@ -359,16 +381,26 @@ export const UserManagement = () => {
                             </button>
 
                             {u.role !== 'ADMIN' && (
-                              <button
-                                onClick={() => handleToggleStatus(u)}
-                                className={`px-2.5 py-1.5 rounded-xl font-extrabold text-[11px] transition-colors ${
-                                  isActive
-                                    ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950 dark:text-rose-300'
-                                    : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
-                                }`}
-                              >
-                                {isActive ? 'Deactivate' : 'Activate'}
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => handleForceLogout(u)}
+                                  title="Force Logout Active Session"
+                                  className="px-2.5 py-1.5 rounded-xl bg-purple-100 hover:bg-purple-200 dark:bg-purple-950 dark:hover:bg-purple-900 text-purple-800 dark:text-purple-300 font-extrabold text-[11px] transition-colors flex items-center gap-1"
+                                >
+                                  <LogOut className="w-3.5 h-3.5" /> Force Logout
+                                </button>
+
+                                <button
+                                  onClick={() => handleToggleStatus(u)}
+                                  className={`px-2.5 py-1.5 rounded-xl font-extrabold text-[11px] transition-colors ${
+                                    isActive
+                                      ? 'bg-rose-100 text-rose-700 hover:bg-rose-200 dark:bg-rose-950 dark:text-rose-300'
+                                      : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-300'
+                                  }`}
+                                >
+                                  {isActive ? 'Deactivate' : 'Activate'}
+                                </button>
+                              </>
                             )}
                           </div>
                         </td>

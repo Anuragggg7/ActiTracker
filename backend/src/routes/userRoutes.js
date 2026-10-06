@@ -13,7 +13,8 @@ import {
   reviewFacultyRegistration,
   approveFaculty,
   rejectFaculty,
-  requestChangesFaculty
+  requestChangesFaculty,
+  forceLogoutUser
 } from '../controllers/userController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 
@@ -26,6 +27,8 @@ router.get('/faculty/:id', protect, authorize('ADMIN', 'DIRECTOR', 'HOD'), getFa
 router.put('/faculty/:id', protect, authorize('ADMIN'), updateFaculty);
 router.patch('/faculty/:id/status', protect, authorize('ADMIN'), toggleUserStatus);
 router.patch('/faculty/:id/password', protect, authorize('ADMIN'), resetFacultyPassword);
+router.post('/faculty/:id/force-logout', protect, authorize('ADMIN'), forceLogoutUser);
+router.post('/:userId/force-logout', protect, authorize('ADMIN'), forceLogoutUser);
 
 // General User Management Routes
 router.get('/', protect, authorize('ADMIN', 'DIRECTOR', 'HOD'), getAllUsers);

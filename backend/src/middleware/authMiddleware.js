@@ -24,6 +24,11 @@ export const protect = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Your account has been suspended by Administration.' });
     }
 
+    // Session validation: If activeSessionToken is set and does not match the token presented (or was revoked by admin), terminate session
+    if (user.activeSessionToken && user.activeSessionToken !== token) {
+      return res.status(401).json({ success: false, message: 'Session invalidated: Account was logged out or accessed from another session.' });
+    }
+
     // Update session timestamp asynchronously
     User.findByIdAndUpdate(user._id, { lastActiveAt: new Date() }).exec().catch(() => {});
 
