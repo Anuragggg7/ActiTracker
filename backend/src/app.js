@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import mongoose from 'mongoose';
 import { errorHandler } from './middleware/errorMiddleware.js';
 
@@ -19,6 +20,25 @@ import analyticsRoutes from './routes/analyticsRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import pdfRoutes from './routes/pdfRoutes.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Dynamic resolver for frontend dist folder to ensure static build works across execution environments
+const getDistFolder = () => {
+  const candidatePaths = [
+    path.resolve(__dirname, '../../frontend/dist'),
+    path.resolve(process.cwd(), 'frontend/dist'),
+    path.resolve(process.cwd(), '../frontend/dist'),
+    path.resolve(process.cwd(), 'dist')
+  ];
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate) && fs.existsSync(path.join(candidate, 'index.html'))) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
 const app = express();
 
 app.use(cors());
@@ -29,12 +49,17 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/uploads', express.static(path.join(process.cwd(), 'public', 'uploads')));
 app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
-// Root Endpoint - Backend Health/Availability Confirmation
-app.get('/', (req, res) => {
-  res.status(200).json({
-    success: true,
-    message: 'ActiTracker Backend is running successfully'
-  });
+// Root Endpoint - Backend Health/Availability Confirmation (or SPA entry if browser)
+app.get('/', (req, res, next) => {
+  const isJsonReq = req.headers.accept && req.headers.accept.includes('application/json');
+  const distFolder = getDistFolder();
+  if (isJsonReq || !distFolder) {
+    return res.status(200).json({
+      success: true,
+      message: 'ActiTracker Backend is running successfully'
+    });
+  }
+  next();
 });
 
 // Health Check Endpoint (un-authenticated)
@@ -81,24 +106,26 @@ app.use('/api/audit-logs', auditRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api', pdfRoutes);
 
-// Serve frontend static build if available (Production SPA Support - Requirement 4)
-const frontendDistPath = path.join(process.cwd(), '..', 'frontend', 'dist');
-const altFrontendDistPath = path.join(process.cwd(), 'frontend', 'dist');
-const distFolder = fs.existsSync(frontendDistPath)
-  ? frontendDistPath
-  : fs.existsSync(altFrontendDistPath)
-  ? altFrontendDistPath
-  : null;
+// Serve static assets from frontend/dist if available
+app.use((req, res, next) => {
+  const distFolder = getDistFolder();
+  if (distFolder) {
+    return express.static(distFolder)(req, res, next);
+  }
+  next();
+});
 
-if (distFolder) {
-  app.use(express.static(distFolder));
-  app.get('*', (req, res, next) => {
-    if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
-      return next();
-    }
-    res.sendFile(path.join(distFolder, 'index.html'));
-  });
-}
+// SPA Fallback for client-side routes on page refresh (e.g., /faculty, /admin, /calendar, /login)
+app.get('*', (req, res, next) => {
+  if (req.originalUrl.startsWith('/api') || req.originalUrl.startsWith('/uploads')) {
+    return next();
+  }
+  const distFolder = getDistFolder();
+  if (distFolder) {
+    return res.sendFile(path.join(distFolder, 'index.html'));
+  }
+  next();
+});
 
 // Catch-all 404 Handler for unmatched API routes
 app.use((req, res) => {
