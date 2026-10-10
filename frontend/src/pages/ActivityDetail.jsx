@@ -407,12 +407,12 @@ export const ActivityDetail = () => {
             <QrCode className="w-4 h-4 text-rcpit-600" /> Verification QR
           </button>
 
-          {report?.status === 'VERIFIED' || ['COMPLETED', 'ARCHIVED'].includes(activity?.status) ? (
+          {report?.status === 'VERIFIED' || ['COMPLETED', 'ARCHIVED'].includes(activity?.status) || ['ADMIN', 'DIRECTOR'].includes(user?.role) || report?.status === 'SUBMITTED' ? (
             <button
               onClick={() => setShowPdfModal(true)}
-              className="px-4 py-2.5 bg-rcpit-600 hover:bg-rcpit-500 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md"
+              className="px-4 py-2.5 bg-rcpit-600 hover:bg-rcpit-500 text-white rounded-xl text-xs font-extrabold flex items-center gap-2 shadow-md transition-all"
             >
-              <Download className="w-4 h-4" /> Generate Official PDF
+              <Download className="w-4 h-4" /> {report?.status === 'VERIFIED' || ['COMPLETED', 'ARCHIVED'].includes(activity?.status) ? 'Generate Official PDF' : 'Preview Official PDF'}
             </button>
           ) : (
             <div className="relative group">
@@ -423,7 +423,7 @@ export const ActivityDetail = () => {
                 <Lock className="w-4 h-4 text-slate-400" /> Generate Official PDF
               </button>
               <div className="absolute right-0 top-full mt-1 hidden group-hover:block z-30 px-3 py-1.5 bg-slate-900 text-white text-[10px] font-bold rounded-lg shadow-lg whitespace-nowrap">
-                Official PDF will be available after HOD verification.
+                Complete post-event report and HOD verification to unlock official PDF.
               </div>
             </div>
           )}
