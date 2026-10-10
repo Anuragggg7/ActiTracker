@@ -268,20 +268,24 @@ export const FacultyDashboard = () => {
                       >
                         <Eye className="w-3.5 h-3.5" />
                       </Link>
-                      <button
-                        onClick={() => setSelectedQrActivity(act)}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300"
-                        title="Show Verification QR Code"
-                      >
-                        <QrCode className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setSelectedPdfActivityId(act._id)}
-                        className="p-1.5 rounded-lg bg-rcpit-50 text-rcpit-600 dark:bg-rcpit-950 dark:text-rcpit-400 font-bold"
-                        title="Generate Event PDF Report"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                      </button>
+                      {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) && (
+                        <>
+                          <button
+                            onClick={() => setSelectedQrActivity(act)}
+                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300"
+                            title="Show Verification QR Code"
+                          >
+                            <QrCode className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setSelectedPdfActivityId(act._id)}
+                            className="p-1.5 rounded-lg bg-rcpit-50 text-rcpit-600 dark:bg-rcpit-950 dark:text-rcpit-400 font-bold"
+                            title="Generate Event PDF Report"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

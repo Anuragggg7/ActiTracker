@@ -1,8 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import RcpitLogo from '../components/RcpitLogo';
-import Prism from '../components/Prism';
 import {
   ShieldCheck,
   FileText,
@@ -12,151 +10,13 @@ import {
   ArrowRight,
   Building2,
   GraduationCap,
-  MapPin,
   LogIn,
-  Mail,
-  Phone,
   Calendar,
   FileCheck,
   Lock
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-
-// Starfield Canvas Background Component
-const ParticleBackground = () => {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-
-    let animationFrameId;
-    let width = (canvas.width = window.innerWidth);
-    let height = (canvas.height = window.innerHeight);
-
-    const handleResize = () => {
-      if (!canvas) return;
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
-    };
-    window.addEventListener('resize', handleResize);
-
-    const particleCount = Math.min(90, Math.floor(width / 16));
-    const particles = [];
-
-    for (let i = 0; i < particleCount; i++) {
-      particles.push({
-        x: Math.random() * width,
-        y: Math.random() * height,
-        radius: Math.random() * 1.8 + 0.5,
-        color: ['#a855f7', '#6366f1', '#38bdf8', '#ffffff'][Math.floor(Math.random() * 4)],
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: (Math.random() - 0.5) * 0.4,
-        alpha: Math.random() * 0.7 + 0.3,
-        pulseSpeed: Math.random() * 0.02 + 0.005
-      });
-    }
-
-    let mouseX = -1000;
-    let mouseY = -1000;
-
-    const handleMouseMove = (e) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-    };
-    window.addEventListener('mousemove', handleMouseMove);
-
-    const render = () => {
-      ctx.clearRect(0, 0, width, height);
-
-      // Draw background ambient radial glow
-      const grad1 = ctx.createRadialGradient(width * 0.5, 0, 0, width * 0.5, 0, width * 0.6);
-      grad1.addColorStop(0, 'rgba(124, 58, 237, 0.12)');
-      grad1.addColorStop(1, 'rgba(0, 0, 0, 0)');
-      ctx.fillStyle = grad1;
-      ctx.fillRect(0, 0, width, height);
-
-      particles.forEach((p, i) => {
-        p.x += p.vx;
-        p.y += p.vy;
-
-        if (p.x < 0) p.x = width;
-        if (p.x > width) p.x = 0;
-        if (p.y < 0) p.y = height;
-        if (p.y > height) p.y = 0;
-
-        p.alpha += Math.sin(Date.now() * p.pulseSpeed) * 0.01;
-        p.alpha = Math.max(0.2, Math.min(0.9, p.alpha));
-
-        ctx.save();
-        ctx.globalAlpha = p.alpha;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
-        ctx.fillStyle = p.color;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = p.color;
-        ctx.fill();
-        ctx.restore();
-
-        // Connect nearby particles
-        for (let j = i + 1; j < particles.length; j++) {
-          const p2 = particles[j];
-          const dx = p.x - p2.x;
-          const dy = p.y - p2.y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          if (dist < 110) {
-            ctx.save();
-            ctx.globalAlpha = (1 - dist / 110) * 0.15;
-            ctx.strokeStyle = '#818cf8';
-            ctx.lineWidth = 0.6;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
-            ctx.lineTo(p2.x, p2.y);
-            ctx.stroke();
-            ctx.restore();
-          }
-        }
-
-        // Draw line to mouse if close
-        const mdx = p.x - mouseX;
-        const mdy = p.y - mouseY;
-        const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-        if (mdist < 140) {
-          ctx.save();
-          ctx.globalAlpha = (1 - mdist / 140) * 0.35;
-          ctx.strokeStyle = '#c084fc';
-          ctx.lineWidth = 0.8;
-          ctx.beginPath();
-          ctx.moveTo(p.x, p.y);
-          ctx.lineTo(mouseX, mouseY);
-          ctx.stroke();
-          ctx.restore();
-        }
-      });
-
-      animationFrameId = requestAnimationFrame(render);
-    };
-
-    render();
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('mousemove', handleMouseMove);
-      cancelAnimationFrame(animationFrameId);
-    };
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-0"
-      style={{ opacity: 0.85 }}
-    />
-  );
-};
 
 export default function Home() {
   const { user } = useAuth();
@@ -246,22 +106,11 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#0a0b0e] text-slate-100 font-sans selection:bg-purple-600 selection:text-white relative overflow-x-hidden transition-colors duration-300">
-      {/* Particle Canvas Background */}
-      <ParticleBackground />
-
-      {/* WebGL 3D Prism Animation Layer */}
-      <div className="fixed inset-0 pointer-events-none z-0 opacity-40 dark:opacity-50 overflow-hidden">
-        <Prism
-          animationType="rotate"
-          timeScale={0.5}
-          height={3.5}
-          baseWidth={5.5}
-          scale={3.6}
-          hueShift={0}
-          colorFrequency={1}
-          noise={0.5}
-          glow={1}
-        />
+      {/* Static Ambient Background Glow */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[80vw] h-[50vh] bg-gradient-to-b from-purple-600/15 via-indigo-600/10 to-transparent rounded-full blur-3xl" />
+        <div className="absolute bottom-0 right-0 w-[50vw] h-[40vh] bg-gradient-to-tl from-cyan-600/10 via-purple-600/5 to-transparent rounded-full blur-3xl" />
+        <div className="absolute top-1/3 left-0 w-[30vw] h-[30vh] bg-gradient-to-r from-indigo-600/8 to-transparent rounded-full blur-3xl" />
       </div>
 
       {/* Top Navbar */}
@@ -282,9 +131,6 @@ export default function Home() {
             </a>
             <a href="#about" className="hover:text-purple-400 transition-colors">
               About Us
-            </a>
-            <a href="#contact" className="hover:text-purple-400 transition-colors">
-              Contact Us
             </a>
           </nav>
 
@@ -333,42 +179,33 @@ export default function Home() {
       {/* Hero Section */}
       <section id="hero" className="relative pt-16 pb-24 lg:pt-24 lg:pb-32 z-10 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
         {/* Floating Top Badge */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-purple-950/60 border border-purple-500/40 text-purple-300 text-xs sm:text-sm font-medium backdrop-blur-xl shadow-lg shadow-purple-950/50 mb-8"
+        <div
+          className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-purple-950/60 border border-purple-500/40 text-purple-300 text-xs sm:text-sm font-medium backdrop-blur-xl shadow-lg shadow-purple-950/50 mb-8 animate-fade-in"
         >
           <Building2 className="w-4 h-4 text-purple-400" />
           <span>Official Institutional Activity Management System | RCPIT Shirpur</span>
-        </motion.div>
+        </div>
 
         {/* Main Hero Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.1 }}
-          className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.1] text-white max-w-5xl mx-auto"
+        <h1
+          className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight leading-[1.1] text-white max-w-5xl mx-auto animate-fade-in"
+          style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
         >
           Centralized Campus Activity & Event Management Portal
-        </motion.h1>
+        </h1>
 
         {/* Hero Description */}
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.2 }}
-          className="mt-6 text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed font-normal"
+        <p
+          className="mt-6 text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed font-normal animate-fade-in"
+          style={{ animationDelay: '0.2s', animationFillMode: 'both' }}
         >
           Empowering R. C. Patel Institute of Technology with real-time activity proposals, conflict-free venue slot allocation, multi-tier HOD approvals, and automated NAAC/NBA audit PDF reports.
-        </motion.p>
+        </p>
 
         {/* Hero CTAs */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, delay: 0.3 }}
-          className="mt-10 flex flex-wrap items-center justify-center gap-4 sm:gap-6"
+        <div
+          className="mt-10 flex flex-wrap items-center justify-center gap-4 sm:gap-6 animate-fade-in"
+          style={{ animationDelay: '0.3s', animationFillMode: 'both' }}
         >
           <Link
             to="/login"
@@ -383,14 +220,12 @@ export default function Home() {
           >
             <span>Explore Key Features</span>
           </a>
-        </motion.div>
+        </div>
 
         {/* Dynamic Key Stats Strip */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="mt-16 pt-8 border-t border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto"
+        <div
+          className="mt-16 pt-8 border-t border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto animate-fade-in"
+          style={{ animationDelay: '0.4s', animationFillMode: 'both' }}
         >
           <div className="p-4 rounded-2xl bg-slate-900/40 border border-slate-800/60 backdrop-blur-md">
             <div className="text-2xl sm:text-3xl font-extrabold text-purple-400">100%</div>
@@ -408,7 +243,7 @@ export default function Home() {
             <div className="text-2xl sm:text-3xl font-extrabold text-cyan-400">0–100%</div>
             <div className="text-xs text-slate-400 font-medium mt-1">Report Quality Score</div>
           </div>
-        </motion.div>
+        </div>
       </section>
 
       {/* Core Key Features Section */}
@@ -431,14 +266,10 @@ export default function Home() {
           {realProjectFeatures.map((item, idx) => {
             const IconComp = item.icon;
             return (
-              <motion.div
+              <div
                 key={item.id}
-                initial={{ opacity: 0, y: 25 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ duration: 0.5, delay: idx * 0.08 }}
-                whileHover={{ y: -6 }}
-                className="group relative rounded-3xl bg-slate-900/70 border border-slate-800/90 p-8 backdrop-blur-xl hover:border-purple-500/40 hover:bg-slate-900/90 transition-all duration-300 shadow-xl flex flex-col justify-between"
+                className="group relative rounded-3xl bg-slate-900/70 border border-slate-800/90 p-8 backdrop-blur-xl hover:border-purple-500/40 hover:bg-slate-900/90 hover:-translate-y-1.5 transition-all duration-300 shadow-xl flex flex-col justify-between animate-fade-in"
+                style={{ animationDelay: `${idx * 0.08}s`, animationFillMode: 'both' }}
               >
                 <div>
                   <div className="flex items-center justify-between mb-6">
@@ -458,7 +289,7 @@ export default function Home() {
                     {item.description}
                   </p>
                 </div>
-              </motion.div>
+              </div>
             );
           })}
         </div>
@@ -479,11 +310,8 @@ export default function Home() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-purple-500/40 transition-all"
+          <div 
+            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-purple-500/40 transition-all animate-fade-in"
           >
             <div className="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 border border-purple-500/30 flex items-center justify-center">
               <GraduationCap className="w-6 h-6" />
@@ -492,14 +320,11 @@ export default function Home() {
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
               Offering premier undergraduate and postgraduate engineering programs across AIML, Data Science, Computer Engineering, IT, E&TC, Civil, Mechanical, and Electrical disciplines.
             </p>
-          </motion.div>
+          </div>
 
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.1 }}
-            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-cyan-500/40 transition-all"
+          <div 
+            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-cyan-500/40 transition-all animate-fade-in"
+            style={{ animationDelay: '0.1s', animationFillMode: 'both' }}
           >
             <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center">
               <Building2 className="w-6 h-6" />
@@ -508,14 +333,11 @@ export default function Home() {
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
               ActiTracker provides a unified institutional portal to streamline activity proposals, venue reservations, multi-tier HOD approvals, and automated NAAC PDF reports.
             </p>
-          </motion.div>
+          </div>
 
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
-            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-emerald-500/40 transition-all"
+          <div 
+            className="p-8 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl space-y-4 hover:border-emerald-500/40 transition-all animate-fade-in"
+            style={{ animationDelay: '0.2s', animationFillMode: 'both' }}
           >
             <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center">
               <ShieldCheck className="w-6 h-6" />
@@ -524,92 +346,11 @@ export default function Home() {
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
               Role-based access controls enforcing isolation across Faculty, Department Heads, T&P Officers, System Administrator, and Director executive dashboards.
             </p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Contact Us Section */}
-      <section id="contact" className="py-20 z-10 relative px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto border-t border-slate-800/80">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-block px-4 py-1.5 rounded-full bg-cyan-950/80 border border-cyan-500/40 text-cyan-300 text-xs font-bold tracking-wider uppercase mb-4 shadow-sm">
-            GET IN TOUCH WITH US
-          </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-            Contact Institutional Support
-          </h2>
-          <p className="mt-4 text-base sm:text-lg text-slate-400 leading-relaxed">
-            Have questions regarding portal access, venue reservations, or department activity tracking? We are here to help.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-          {/* Contact Details Cards */}
-          <div className="space-y-6">
-            <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl flex items-start gap-4 hover:border-purple-500/40 transition-all">
-              <div className="p-3.5 rounded-2xl bg-purple-500/20 border border-purple-500/30 text-purple-400 shrink-0">
-                <MapPin className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-white">Campus Location</h4>
-                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                  R. C. Patel Institute of Technology, Near Nimzari Naka, Shahada Road, Shirpur, Dist. Dhule, Maharashtra - 425405, India.
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl flex items-start gap-4 hover:border-cyan-500/40 transition-all">
-              <div className="p-3.5 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 shrink-0">
-                <Mail className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-white">Institutional Support Desk</h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Email: <span className="text-white font-semibold">support@rcpit.ac.in</span> | <span className="text-white font-semibold">principal@rcpit.ac.in</span>
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 backdrop-blur-xl flex items-start gap-4 hover:border-emerald-500/40 transition-all">
-              <div className="p-3.5 rounded-2xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 shrink-0">
-                <Phone className="w-6 h-6" />
-              </div>
-              <div>
-                <h4 className="text-base font-bold text-white">Telephone Desk</h4>
-                <p className="text-xs text-slate-400 mt-1">
-                  Phone: <span className="text-white font-semibold">+91 2563 259802 / 259803</span> | Fax: <span className="text-white font-semibold">+91 2563 259801</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Form Card */}
-          <div className="p-8 rounded-3xl bg-slate-900/90 border border-slate-800 backdrop-blur-2xl shadow-2xl space-y-4">
-            <h3 className="text-xl font-bold text-white">Send Support Enquiry</h3>
-            <p className="text-xs text-slate-400">Fill in your information to receive official assistance from RCPIT System Administration.</p>
-            
-            <form onSubmit={(e) => { e.preventDefault(); alert('Thank you! Your enquiry has been received by RCPIT Support Desk.'); }} className="space-y-4 pt-2">
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-1.5">Your Name</label>
-                <input type="text" required placeholder="Prof. Nilesh Patil" className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-1.5">Official Email</label>
-                <input type="email" required placeholder="nilesh.patil@rcpit.ac.in" className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500" />
-              </div>
-
-              <div>
-                <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-300 mb-1.5">Message / Inquiry</label>
-                <textarea rows={3} required placeholder="Describe your query regarding activity tracking or portal access..." className="w-full px-4 py-3 rounded-xl bg-slate-950 border border-slate-700/80 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-purple-500"></textarea>
-              </div>
-
-              <button type="submit" className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs uppercase tracking-wider rounded-xl shadow-lg transition-all cursor-pointer">
-                Send Enquiry
-              </button>
-            </form>
           </div>
         </div>
       </section>
+
+
 
       {/* Final CTA Banner */}
       <section className="py-20 z-10 relative px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
@@ -653,9 +394,6 @@ export default function Home() {
             </a>
             <a href="#about" className="hover:text-purple-400 transition-colors">
               About Us
-            </a>
-            <a href="#contact" className="hover:text-purple-400 transition-colors">
-              Contact Us
             </a>
             <Link to="/login" className="hover:text-purple-400 transition-colors">
               Portal Sign In

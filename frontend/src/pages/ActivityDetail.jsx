@@ -975,6 +975,7 @@ export const ActivityDetail = () => {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px]">
+                    <th className="pb-3 px-2">Sr. No.</th>
                     <th className="pb-3 px-2">Participant Name</th>
                     <th className="pb-3 px-2">ID / PRN</th>
                     <th className="pb-3 px-2">Department</th>
@@ -984,8 +985,9 @@ export const ActivityDetail = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {attendance.records.map((r) => (
+                  {attendance.records.map((r, idx) => (
                     <tr key={r._id}>
+                      <td className="py-3 px-2 font-bold text-slate-500 dark:text-slate-400">{idx + 1}</td>
                       <td className="py-3 px-2 font-bold text-slate-900 dark:text-white">{r.participantName}</td>
                       <td className="py-3 px-2 text-slate-500">{r.participantId || 'N/A'}</td>
                       <td className="py-3 px-2 text-slate-500">{r.department}</td>
@@ -1262,9 +1264,9 @@ export const ActivityDetail = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
             <h3 className="font-extrabold text-base text-slate-900 dark:text-white">Import Attendance via CSV</h3>
-            <p className="text-slate-500">Paste CSV data in format: <code>Name, PRN, Department, Type, Email, Status</code></p>
+            <p className="text-slate-500">Paste CSV data. Formats with or without Sr. No. are supported: <code>[Sr. No], Name, PRN/ID, Department, Type, Email, Status</code></p>
             <form onSubmit={handleImportCsv} className="space-y-3">
-              <textarea rows="6" placeholder="Name, ID, Department, Type, Email, Status&#10;John Doe, 202601, Computer, STUDENT, john@rcpit.ac.in, PRESENT" value={csvText} onChange={(e) => setCsvText(e.target.value)} className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border font-mono text-[11px]" />
+              <textarea rows="6" placeholder="Sr. No, Name, ID, Department, Type, Email, Status&#10;1, John Doe, 202601, Computer, STUDENT, john@rcpit.ac.in, PRESENT" value={csvText} onChange={(e) => setCsvText(e.target.value)} className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border font-mono text-[11px]" />
               <div className="flex justify-end gap-2">
                 <button type="button" onClick={() => setShowCsvImportModal(false)} className="px-4 py-2 bg-slate-100 font-bold rounded-xl">Cancel</button>
                 <button type="submit" className="px-5 py-2 bg-rcpit-600 text-white font-bold rounded-xl shadow">Import Records</button>

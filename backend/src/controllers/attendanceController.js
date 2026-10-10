@@ -22,7 +22,7 @@ const canModifyAttendance = (user, activity) => {
 export const getActivityAttendance = async (req, res) => {
   try {
     const { id } = req.params;
-    const records = await Attendance.find({ activityId: id }).sort({ participantName: 1 });
+    const records = await Attendance.find({ activityId: id }).sort({ createdAt: 1, _id: 1 });
 
     const total = records.length;
     const present = records.filter(r => r.attendanceStatus === 'PRESENT').length;
@@ -117,6 +117,7 @@ export const removeParticipant = async (req, res) => {
 };
 
 // Import Attendance CSV
+// Import Attendance CSV
 export const importAttendanceCSV = async (req, res) => {
   try {
     const { id } = req.params;
@@ -137,21 +138,44 @@ export const importAttendanceCSV = async (req, res) => {
       return res.status(400).json({ success: false, message: 'CSV file must contain a header and at least 1 data row' });
     }
 
+    // Determine if first column is Serial Number (Sr. No. / S.No / # / Sr)
+    const headerCols = lines[0].split(',').map(p => p.trim().replace(/^"|"$/g, '').toLowerCase());
+    const firstColHeader = headerCols[0] || '';
+    const isSrNoHeader = /^(sr|sr\.?|s\.?no|#|serial|sl\.?no|no\.?)$/i.test(firstColHeader) ||
+                         firstColHeader.includes('sr') ||
+                         firstColHeader.includes('serial');
+
     const createdRecords = [];
     for (let i = 1; i < lines.length; i++) {
       const parts = lines[i].split(',').map(p => p.trim().replace(/^"|"$/g, ''));
-      if (!parts[0]) continue;
+      if (parts.length === 0 || !parts.some(Boolean)) continue;
+
+      // Check if row has leading serial number (either header said so, or first col is pure integer and col 1 has text)
+      const hasLeadingSrNo = isSrNoHeader || (/^\d+$/.test(parts[0]) && parts.length > 2 && isNaN(Number(parts[1])));
+      const offset = hasLeadingSrNo ? 1 : 0;
+
+      const participantName = parts[offset];
+      if (!participantName) continue;
+
+      const participantId = parts[offset + 1] || '';
+      const department = parts[offset + 2] || 'General';
+      const participantTypeRaw = parts[offset + 3]?.toUpperCase();
+      const participantType = ['STUDENT', 'FACULTY', 'EXTERNAL', 'GUEST'].includes(participantTypeRaw)
+        ? participantTypeRaw
+        : 'STUDENT';
+      const email = parts[offset + 4] || '';
+      const statusRaw = parts[offset + 5]?.toUpperCase();
+      const attendanceStatus = statusRaw === 'ABSENT' ? 'ABSENT' : 'PRESENT';
 
       const record = await Attendance.create({
         activityId: id,
-        participantName: parts[0],
-        participantId: parts[1] || '',
-        department: parts[2] || 'General',
-        participantType: ['STUDENT', 'FACULTY', 'EXTERNAL', 'GUEST'].includes(parts[3]?.toUpperCase())
-          ? parts[3].toUpperCase()
-          : 'STUDENT',
-        email: parts[4] || '',
-        attendanceStatus: parts[5]?.toUpperCase() === 'ABSENT' ? 'ABSENT' : 'PRESENT'
+        participantName,
+        participantId,
+        department,
+        participantType,
+        email,
+        attendanceStatus,
+        checkInTime: new Date(Date.now() + i)
       });
       createdRecords.push(record);
     }
@@ -173,11 +197,11 @@ export const exportAttendanceCSV = async (req, res) => {
   try {
     const { id } = req.params;
     const activity = await Activity.findById(id);
-    const records = await Attendance.find({ activityId: id }).sort({ participantName: 1 });
+    const records = await Attendance.find({ activityId: id }).sort({ createdAt: 1, _id: 1 });
 
-    let csvContent = 'Participant Name,ID,Department,Type,Email,Status,CheckIn Time\n';
-    records.forEach(r => {
-      csvContent += `"${r.participantName}","${r.participantId}","${r.department}","${r.participantType}","${r.email}","${r.attendanceStatus}","${new Date(r.checkInTime).toLocaleString()}"\n`;
+    let csvContent = 'Sr. No,Participant Name,ID,Department,Type,Email,Status,CheckIn Time\n';
+    records.forEach((r, idx) => {
+      csvContent += `"${idx + 1}","${r.participantName}","${r.participantId}","${r.department}","${r.participantType}","${r.email}","${r.attendanceStatus}","${new Date(r.checkInTime).toLocaleString()}"\n`;
     });
 
     res.setHeader('Content-Type', 'text/csv');

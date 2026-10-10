@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNotifications } from '../context/NotificationContext';
 import RcpitLogo from '../components/RcpitLogo';
-import Prism from '../components/Prism';
 import { 
   LogIn, 
   Eye, 
@@ -68,19 +67,10 @@ export const Login = () => {
       <div className="absolute bottom-10 -right-20 w-96 h-96 bg-purple-500/25 dark:bg-purple-600/30 rounded-full blur-3xl pointer-events-none transition-all duration-500"></div>
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[36rem] h-[36rem] bg-amber-500/15 dark:bg-rcpit-500/15 rounded-full blur-3xl pointer-events-none transition-all duration-500"></div>
 
-      {/* WebGL 3D Prism Animation Container */}
-      <div className="absolute inset-0 pointer-events-none z-0 opacity-50 dark:opacity-60 overflow-hidden">
-        <Prism
-          animationType="rotate"
-          timeScale={0.5}
-          height={3.5}
-          baseWidth={5.5}
-          scale={3.6}
-          hueShift={0}
-          colorFrequency={1}
-          noise={0.5}
-          glow={1}
-        />
+      {/* Static Ambient Glow Background */}
+      <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[40rem] h-[40rem] bg-gradient-to-br from-indigo-500/20 via-purple-500/15 to-rcpit-500/10 rounded-full blur-3xl opacity-50 dark:opacity-60" />
+        <div className="absolute bottom-0 right-0 w-[25rem] h-[25rem] bg-gradient-to-tl from-purple-500/15 to-transparent rounded-full blur-3xl opacity-40 dark:opacity-50" />
       </div>
 
       {/* Floating Glassy Top Header Navigation Bar */}

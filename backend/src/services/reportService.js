@@ -32,7 +32,7 @@ export const generateAndStoreOfficialPDF = async ({ activityId, user, req }) => 
     throw new Error('Official PDF cannot be generated until the activity report is verified by HOD.');
   }
 
-  const attendanceRecords = await Attendance.find({ activityId }).sort({ participantName: 1 });
+  const attendanceRecords = await Attendance.find({ activityId }).sort({ createdAt: 1, _id: 1 });
   const verifiedMedia = await Media.find({ activityId, verificationStatus: 'VERIFIED' });
   const completenessScore = await calculateCompletenessScore(activityId);
 

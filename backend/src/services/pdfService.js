@@ -158,7 +158,8 @@ export const buildOfficialActivityPDF = async ({ activity, report, attendanceRec
       // Table Header
       doc.rect(40, currentY, 515, 18).fill(PRIMARY);
       doc.fillColor('#ffffff').fontSize(8).font('Helvetica-Bold');
-      doc.text('Participant Name', 48, currentY + 5);
+      doc.text('Sr.', 46, currentY + 5);
+      doc.text('Participant Name', 70, currentY + 5);
       doc.text('PRN / ID', 200, currentY + 5);
       doc.text('Department', 310, currentY + 5);
       doc.text('Type', 420, currentY + 5);
@@ -176,7 +177,8 @@ export const buildOfficialActivityPDF = async ({ activity, report, attendanceRec
           const bg = idx % 2 === 0 ? '#ffffff' : '#fafbfc';
           doc.rect(40, currentY, 515, 18).fillAndStroke(bg, BORDER_COLOR);
           doc.fillColor(TEXT_DARK).fontSize(7.5).font('Helvetica');
-          doc.text(r.participantName || 'N/A', 48, currentY + 5, { width: 140, height: 10 });
+          doc.text(String(idx + 1), 46, currentY + 5);
+          doc.text(r.participantName || 'N/A', 70, currentY + 5, { width: 125, height: 10 });
           doc.text(r.participantId || 'N/A', 200, currentY + 5);
           doc.text(r.department || 'General', 310, currentY + 5);
           doc.text(r.participantType || 'STUDENT', 420, currentY + 5);
