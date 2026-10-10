@@ -141,19 +141,121 @@ async function runUAT() {
     recordStep(6, 'Faculty Creates Activity Proposal', createActRes.success === true && !!activityId, `Activity ID: ${activityId}`);
 
     // -------------------------------------------------------------
-    // STEP 7: HOD Receives and Approves Activity Proposal
+    // STEP 7: HOD Reviews and Forwards Activity Proposal to Admin
     // -------------------------------------------------------------
-    const hodApproveActRes = await fetch(`${BASE_URL}/activities/${activityId}/hod-review`, {
-      method: 'PUT',
+    const hodPendingRes = await fetch(`${BASE_URL}/activities/pending-hod`, { headers: hodHeaders }).then(r => r.json());
+    const isActivityInHodQueue = hodPendingRes.success && (hodPendingRes.activities || []).some(a => a._id === activityId);
+
+    const hodForwardRes = await fetch(`${BASE_URL}/activities/${activityId}/forward-to-admin`, {
+      method: 'PATCH',
       headers: hodHeaders,
-      body: JSON.stringify({ action: 'APPROVE', notes: 'Approved for execution by HOD AIML' })
+      body: JSON.stringify({ notes: 'Reviewed proposal; forwarded to Admin for institutional approval.' })
     }).then(r => r.json());
 
-    if (!hodApproveActRes.success) {
-      console.error('STEP 7 ERROR:', JSON.stringify(hodApproveActRes));
+    if (!hodForwardRes.success) {
+      console.error('STEP 7 ERROR:', JSON.stringify(hodForwardRes));
     }
 
-    recordStep(7, 'HOD Receives & Approves Activity', hodApproveActRes.success === true, `Status: ${hodApproveActRes.activity?.status}`);
+    const adminPendingRes = await fetch(`${BASE_URL}/activities/pending-admin`, { headers: adminHeaders }).then(r => r.json());
+    const isActivityInAdminQueue = adminPendingRes.success && (adminPendingRes.activities || []).some(a => a._id === activityId);
+
+    recordStep(7, 'HOD Reviews and Forwards Activity to Admin', hodForwardRes.success === true && hodForwardRes.activity?.status === 'ADMIN_REVIEW' && isActivityInAdminQueue, `Status: ${hodForwardRes.activity?.status}, In Admin Queue: ${isActivityInAdminQueue}`);
+
+    // -------------------------------------------------------------
+    // STEP 7b: RBAC Enforcement - Unauthorized Users Cannot Admin-Approve
+    // -------------------------------------------------------------
+    const facultyAdminApproveAttempt = await fetch(`${BASE_URL}/activities/${activityId}/admin-approve`, {
+      method: 'PATCH',
+      headers: facultyHeaders,
+      body: JSON.stringify({ notes: 'Faculty unauthorized attempt' })
+    }).then(r => r.json());
+
+    const hodAdminApproveAttempt = await fetch(`${BASE_URL}/activities/${activityId}/admin-approve`, {
+      method: 'PATCH',
+      headers: hodHeaders,
+      body: JSON.stringify({ notes: 'HOD unauthorized attempt' })
+    }).then(r => r.json());
+
+    const rbacProtected = facultyAdminApproveAttempt.success === false && hodAdminApproveAttempt.success === false;
+    recordStep('7b', 'Verify RBAC: Faculty and HOD Cannot Call Admin Approval', rbacProtected, `Faculty blocked: ${facultyAdminApproveAttempt.message}, HOD blocked: ${hodAdminApproveAttempt.message}`);
+
+    // -------------------------------------------------------------
+    // STEP 7c: Admin Performs Final Activity Approval
+    // -------------------------------------------------------------
+    const adminApproveRes = await fetch(`${BASE_URL}/activities/${activityId}/admin-approve`, {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({ notes: 'Institutionally approved by Admin. Proceed with venue scheduling.' })
+    }).then(r => r.json());
+
+    if (!adminApproveRes.success) {
+      console.error('STEP 7c ERROR:', JSON.stringify(adminApproveRes));
+    }
+
+    recordStep('7c', 'Admin Performs Final Activity Approval', adminApproveRes.success === true && adminApproveRes.activity?.status === 'ADMIN_APPROVED', `Status: ${adminApproveRes.activity?.status}`);
+
+    // -------------------------------------------------------------
+    // STEP 7d: Admin Rejection Flow & Mandatory Reason Validation
+    // -------------------------------------------------------------
+    const createAct2Res = await fetch(`${BASE_URL}/activities`, {
+      method: 'POST',
+      headers: facultyHeaders,
+      body: JSON.stringify({
+        title: 'Secondary Student Workshop on Robotics',
+        category: 'Workshop',
+        departmentId: aimlDept._id,
+        description: 'Introductory hands-on session on ROS and robotics mechanics.',
+        objectives: 'Hands-on hardware interaction',
+        targetAudience: 'Second Year Students',
+        date: '2026-09-22',
+        startTime: '10:00',
+        endTime: '13:00',
+        durationHours: 3,
+        expectedParticipants: 60,
+        estimatedBudget: 45000,
+        fundingSource: 'Department Fund'
+      })
+    }).then(r => r.json());
+
+    if (!createAct2Res.success) {
+      console.error('STEP 7d CREATE ACT2 ERROR:', JSON.stringify(createAct2Res));
+    }
+    const act2Id = createAct2Res.activity?._id;
+
+    // HOD forwards proposal 2
+    await fetch(`${BASE_URL}/activities/${act2Id}/forward-to-admin`, {
+      method: 'PATCH',
+      headers: hodHeaders,
+      body: JSON.stringify({ notes: 'Forwarded for budget clearance' })
+    });
+
+    // Admin rejects without reason (should fail)
+    const adminRejectMissingReason = await fetch(`${BASE_URL}/activities/${act2Id}/admin-reject`, {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({})
+    }).then(r => r.json());
+
+    // Admin rejects with valid reason
+    const adminRejectRes = await fetch(`${BASE_URL}/activities/${act2Id}/admin-reject`, {
+      method: 'PATCH',
+      headers: adminHeaders,
+      body: JSON.stringify({ reason: 'Estimated budget exceeds the student workshop grant cap for Q3.' })
+    }).then(r => r.json());
+
+    if (!adminRejectRes.success) {
+      console.error('STEP 7d REJECT ERROR:', JSON.stringify(adminRejectRes));
+    }
+
+    recordStep('7d', 'Admin Rejection Flow & Mandatory Reason Validation', adminRejectMissingReason.success === false && adminRejectRes.success === true && adminRejectRes.activity?.status === 'REJECTED', `Status: ${adminRejectRes.activity?.status}, Reason enforced: ${adminRejectMissingReason.success === false}`);
+
+    // -------------------------------------------------------------
+    // STEP 7e: Activity Approvals Audit Trail Verification
+    // -------------------------------------------------------------
+    const approvalsRes = await fetch(`${BASE_URL}/activities/${activityId}/approvals`, { headers: facultyHeaders }).then(r => r.json());
+    const recordedActions = (approvalsRes.approvals || []).map(a => a.action);
+    const hasAuditTrail = recordedActions.includes('FORWARDED_TO_ADMIN') && recordedActions.includes('ADMIN_APPROVED');
+    recordStep('7e', 'Activity Approvals Audit Trail Verification', approvalsRes.success === true && hasAuditTrail, `Recorded Actions: ${recordedActions.join(' -> ')}`);
 
     // -------------------------------------------------------------
     // STEP 8: Activity Slot Request
@@ -452,8 +554,17 @@ async function runUAT() {
 
     recordStep(25, 'Verify Profile Recovery via /auth/me', meRes.success === true && meRes.user?.email === 'nilesh.patil@rcpit.ac.in', `User Profile Recovered: ${meRes.user?.name} (${meRes.user?.role})`);
 
+    const allPassed = results.every(r => r.passed);
     console.log('=======================================================');
-    console.log('🎉 ALL 25 REAL-DATABASE UAT WORKFLOW STEPS PASSED 100%!');
+    console.log(`Total Steps Tested: ${results.length}`);
+    console.log(`Passed: ${results.filter(r => r.passed).length}`);
+    console.log(`Failed: ${results.filter(r => !r.passed).length}`);
+    if (allPassed) {
+      console.log('🎉 ALL REAL-DATABASE UAT WORKFLOW STEPS PASSED 100%!');
+    } else {
+      console.error('❌ SOME UAT STEPS FAILED');
+      process.exitCode = 1;
+    }
     console.log('=======================================================');
 
   } catch (err) {

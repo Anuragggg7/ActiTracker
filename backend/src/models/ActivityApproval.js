@@ -7,15 +7,27 @@ const activityApprovalSchema = new mongoose.Schema(
       type: String,
       enum: [
         'SUBMITTED',
+        'HOD_REVIEW',
+        'FORWARDED_TO_ADMIN',
+        'ADMIN_REVIEW',
+        'ADMIN_APPROVED',
+        'ADMIN_REJECTED',
         'APPROVED',
         'REJECTED',
         'CHANGES_REQUESTED',
+        'CHANGES_REQUIRED',
         'SLOT_REQUESTED',
         'SLOT_APPROVED',
         'SLOT_REJECTED',
+        'SCHEDULED',
+        'CONDUCTED',
+        'REPORT_PENDING',
+        'REPORT_SUBMITTED',
         'VERIFIED',
+        'VERIFICATION',
         'COMPLETED',
-        'ARCHIVED'
+        'ARCHIVED',
+        'STATUS_UPDATE'
       ],
       required: true
     },

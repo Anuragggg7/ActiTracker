@@ -140,7 +140,7 @@ export const checkSlotAvailability = async ({
     const actQuery = {
       venueId,
       date: { $gte: startOfDay, $lte: endOfDay },
-      status: { $in: ['SUBMITTED', 'HOD_REVIEW', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'REPORT_SUBMITTED', 'VERIFICATION', 'COMPLETED'] }
+      status: { $in: ['SUBMITTED', 'HOD_REVIEW', 'ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'REPORT_SUBMITTED', 'VERIFICATION', 'COMPLETED'] }
     };
     if (excludeActivityId) {
       actQuery._id = { $ne: excludeActivityId };
@@ -234,7 +234,7 @@ export const getVenueScheduleService = async (venueId, dateInput) => {
     Activity.find({
       venueId,
       date: { $gte: startOfDay, $lte: endOfDay },
-      status: { $in: ['SUBMITTED', 'HOD_REVIEW', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'REPORT_SUBMITTED', 'VERIFICATION', 'COMPLETED'] }
+      status: { $in: ['SUBMITTED', 'HOD_REVIEW', 'ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'REPORT_SUBMITTED', 'VERIFICATION', 'COMPLETED'] }
     })
   ]);
 

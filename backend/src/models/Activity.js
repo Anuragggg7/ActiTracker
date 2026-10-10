@@ -86,12 +86,15 @@ const activitySchema = new mongoose.Schema(
         'DRAFT',
         'SUBMITTED',
         'HOD_REVIEW',
+        'ADMIN_REVIEW',
+        'ADMIN_APPROVED',
         'HOD_APPROVED',
         'SLOT_REQUESTED',
         'SLOT_APPROVED',
         'SCHEDULED',
         'CONDUCTED',
         'REPORT_PENDING',
+        'REPORT_SUBMITTED',
         'VERIFICATION',
         'COMPLETED',
         'ARCHIVED',
@@ -102,8 +105,13 @@ const activitySchema = new mongoose.Schema(
       default: 'DRAFT'
     },
 
-    // Review & Rejection feedback
+    // Review, Forwarding & Approval feedback
     hodReviewNotes: { type: String, default: '' },
+    hodForwardedAt: { type: Date },
+    hodForwardedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    adminReviewNotes: { type: String, default: '' },
+    adminDecisionAt: { type: Date },
+    adminDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     adminSlotNotes: { type: String, default: '' },
     rejectionReason: { type: String, default: '' },
 

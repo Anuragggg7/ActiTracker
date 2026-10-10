@@ -119,7 +119,7 @@ export const getActionCenterItems = async (req, res) => {
 
       const pendingEvents = await Activity.find({
         departmentId: deptId,
-        status: 'SUBMITTED'
+        status: { $in: ['SUBMITTED', 'HOD_REVIEW'] }
       });
       pendingEvents.forEach(act => {
         items.push({
@@ -127,10 +127,21 @@ export const getActionCenterItems = async (req, res) => {
           title: `Activity Review Required: "${act.title}"`,
           type: 'EVENT_APPROVAL',
           priority: 'HIGH',
-          link: `/hod/activity-approvals`
+          link: `/hod`
         });
       });
     } else if (role === 'ADMIN') {
+      const pendingApprovals = await Activity.countDocuments({ status: 'ADMIN_REVIEW' });
+      if (pendingApprovals > 0) {
+        items.push({
+          id: 'activities-pending-admin',
+          title: `${pendingApprovals} Activity Proposal(s) Forwarded by HOD Awaiting Final Approval`,
+          type: 'ACTIVITY_APPROVAL',
+          priority: 'HIGH',
+          link: '/admin'
+        });
+      }
+
       const pendingSlots = await SlotRequest.countDocuments({ status: { $in: ['PENDING', 'CONFLICT_DETECTED'] } });
       if (pendingSlots > 0) {
         items.push({

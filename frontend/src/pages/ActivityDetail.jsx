@@ -84,6 +84,9 @@ export const ActivityDetail = () => {
   });
   const [submittingBudget, setSubmittingBudget] = useState(false);
 
+  // Approvals Audit Trail
+  const [approvals, setApprovals] = useState([]);
+
   // HOD Review Notes
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewActioning, setReviewActioning] = useState(false);
@@ -113,6 +116,7 @@ export const ActivityDetail = () => {
           budgetStatus: actRes.activity.budgetStatus || 'PROPOSED',
           budgetCategories: actRes.activity.budgetCategories || []
         });
+        if (actRes.approvals) setApprovals(actRes.approvals);
       }
       if (mediaRes.success) setMedia(mediaRes.media || []);
       if (docRes.success) setDocuments(docRes.documents || []);
@@ -456,8 +460,9 @@ export const ActivityDetail = () => {
           <CompletenessScoreWidget
             score={activity.documentationScore || 0}
             checklist={[
-              { label: 'Activity Created & Scheduled', done: true },
-              { label: 'HOD Department Approval', done: ['HOD_APPROVED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
+              { label: 'Activity Created & Proposed', done: true },
+              { label: 'HOD Department Review & Forwarded', done: ['ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
+              { label: 'Admin Institutional Final Approval', done: ['ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
               { label: 'Slot Allocation Confirmed', done: ['SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
               { label: 'Attendance Records Logged', done: attendance.stats.total > 0 },
               { label: 'Geo-Tagged Photographs Uploaded', done: media.some(m => m.mediaType?.toUpperCase() === 'IMAGE') },
@@ -582,7 +587,8 @@ export const ActivityDetail = () => {
           <div className="relative pl-6 border-l-2 border-slate-200 dark:border-slate-800 space-y-8 my-4">
             {[
               { title: 'Activity Proposal Submitted', done: true },
-              { title: 'HOD Department Verification', done: ['HOD_APPROVED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
+              { title: 'HOD Department Review & Forwarded', done: ['ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
+              { title: 'Admin Final Institutional Approval', done: ['ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
               { title: 'Venue Slot Allocated', done: ['SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
               { title: 'Event Conducted', done: ['CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
               { title: 'Post-Event Report Submitted', done: ['VERIFICATION', 'COMPLETED'].includes(activity.status) },
@@ -1099,11 +1105,55 @@ export const ActivityDetail = () => {
 
       {/* TAB: APPROVALS & WORKFLOW */}
       {activeTab === 'approvals' && (
-        <div className="glass-card p-6 space-y-4">
-          <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-            Governance & Audit Logs
-          </h3>
-          <p className="text-xs text-slate-500">Official log of activity status updates, approvals and media verification.</p>
+        <div className="glass-card p-6 space-y-5">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+            <div>
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                Institutional Approval & Governance Audit Trail
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Chronological record of proposal reviews, HOD endorsements, and Admin approvals.</p>
+            </div>
+            <span className="text-xs font-bold text-rcpit-600 bg-rcpit-50 dark:bg-rcpit-950 px-3 py-1 rounded-full border border-rcpit-200 dark:border-rcpit-800">
+              {approvals.length} Record(s) Logged
+            </span>
+          </div>
+
+          {approvals.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-400">
+              No formal governance approval events logged yet for this proposal.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {approvals.map((app, idx) => (
+                <div key={app._id || idx} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
+                        {app.action?.replace(/_/g, ' ')}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-700">•</span>
+                      <span className="text-[10px] text-slate-500">
+                        {new Date(app.timestamp || app.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300 mt-1">
+                      Action Performed By: <strong className="text-slate-800 dark:text-slate-200">{app.performedBy?.name || 'User'}</strong> ({app.role || app.performedBy?.role})
+                    </p>
+                    {app.comments && (
+                      <p className="mt-1 text-slate-500 italic bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200/60 dark:border-slate-800">
+                        "{app.comments}"
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="px-2.5 py-1 rounded-full bg-slate-200 dark:bg-slate-700 text-[10px] font-bold text-slate-700 dark:text-slate-300">
+                      {app.previousStatus ? `${app.previousStatus} → ` : ''}{app.newStatus || app.action}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

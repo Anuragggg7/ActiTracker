@@ -21,9 +21,9 @@ export const calculateCompletenessScore = async (activityId) => {
       score += 20;
     }
 
-    // 2. HOD Approval Status - 20%
-    const validHodStatuses = ['HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED', 'ARCHIVED'];
-    if (validHodStatuses.includes(activity.status)) {
+    // 2. Institutional Approval Status - 20%
+    const validApprovalStatuses = ['ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED', 'ARCHIVED'];
+    if (validApprovalStatuses.includes(activity.status)) {
       score += 20;
     }
 

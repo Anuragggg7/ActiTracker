@@ -6,7 +6,7 @@ export const calculateDocumentationScore = async (activity) => {
   let score = 0;
   const checklist = [
     { label: 'Activity details completed', weight: 20, done: false },
-    { label: 'HOD Approval & Slot Scheduled', weight: 20, done: false },
+    { label: 'Admin Approval & Slot Scheduled', weight: 20, done: false },
     { label: 'Attendance Uploaded', weight: 15, done: false },
     { label: 'Event Images Uploaded', weight: 15, done: false },
     { label: 'Event Video / Reel Uploaded', weight: 10, done: false },

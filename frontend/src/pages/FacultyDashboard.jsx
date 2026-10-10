@@ -168,7 +168,7 @@ export const FacultyDashboard = () => {
         <div className="glass-card p-5 space-y-1">
           <span className="text-xs text-amber-600 font-bold uppercase tracking-wider">Pending Approvals</span>
           <p className="text-2xl font-black text-amber-600">
-            {activities.filter(a => ['SUBMITTED', 'HOD_REVIEW', 'SLOT_REQUESTED'].includes(a.status)).length}
+            {activities.filter(a => ['SUBMITTED', 'HOD_REVIEW', 'ADMIN_REVIEW', 'SLOT_REQUESTED'].includes(a.status)).length}
           </p>
         </div>
         <div className="glass-card p-5 space-y-1">
