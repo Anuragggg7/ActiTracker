@@ -7,6 +7,7 @@ import { NotificationProvider } from './context/NotificationContext';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import GlobalSearchModal from './components/GlobalSearchModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import Login from './pages/Login';
 import FacultyDashboard from './pages/FacultyDashboard';
@@ -80,7 +81,11 @@ const MainLayout = ({ children }) => {
   const isHomePage = location.pathname === '/';
 
   if (isAuthPage || (isHomePage && !user)) {
-    return <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">{children}</main>;
+    return (
+      <main className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-300">
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </main>
+    );
   }
 
   return (
@@ -91,7 +96,9 @@ const MainLayout = ({ children }) => {
       <div className="flex-1 flex max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6 gap-6">
         {user && <Sidebar />}
         <main className="flex-1 min-w-0 flex flex-col justify-between">
-          <div>{children}</div>
+          <div>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </div>
           <footer className="py-6 text-center">
             <div className="inline-block px-6 py-2.5 rounded-2xl bg-white/60 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800/80 backdrop-blur-md shadow-md text-xs font-bold text-slate-600 dark:text-slate-400">
               © 2026 ActiTracker. All Rights Reserved.

@@ -339,15 +339,18 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
     }
 
     // Notify Faculty Coordinator
-    await Notification.createIdempotent({
-      recipientId: activity.coordinatorId._id,
-      senderId: user._id,
-      title: 'Activity Forwarded to Admin',
-      message: `Your activity proposal "${activity.title}" was reviewed by HOD ${user.name} and forwarded to Admin for final approval.`,
-      category: 'Approval',
-      priority: 'MEDIUM',
-      link: `/activities/${activity._id}`
-    });
+    const coordRecipientId = activity.coordinatorId?._id || activity.coordinatorId;
+    if (coordRecipientId) {
+      await Notification.createIdempotent({
+        recipientId: coordRecipientId,
+        senderId: user._id,
+        title: 'Activity Forwarded to Admin',
+        message: `Your activity proposal "${activity.title}" was reviewed by HOD ${user.name} and forwarded to Admin for final approval.`,
+        category: 'Approval',
+        priority: 'MEDIUM',
+        link: `/activities/${activity._id}`
+      });
+    }
 
     await activity.save();
     await logAudit({
@@ -386,15 +389,18 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       comments: notes
     });
 
-    await Notification.createIdempotent({
-      recipientId: activity.coordinatorId._id,
-      senderId: user._id,
-      title: 'Activity Proposal Rejected by HOD',
-      message: `Your activity proposal "${activity.title}" was rejected by HOD. Reason: ${notes}`,
-      category: 'Approval',
-      priority: 'HIGH',
-      link: `/activities/${activity._id}`
-    });
+    const rejectCoordId = activity.coordinatorId?._id || activity.coordinatorId;
+    if (rejectCoordId) {
+      await Notification.createIdempotent({
+        recipientId: rejectCoordId,
+        senderId: user._id,
+        title: 'Activity Proposal Rejected by HOD',
+        message: `Your activity proposal "${activity.title}" was rejected by HOD. Reason: ${notes}`,
+        category: 'Approval',
+        priority: 'HIGH',
+        link: `/activities/${activity._id}`
+      });
+    }
 
     await activity.save();
     await logAudit({
@@ -432,15 +438,18 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       comments: notes
     });
 
-    await Notification.createIdempotent({
-      recipientId: activity.coordinatorId._id,
-      senderId: user._id,
-      title: 'Activity Changes Requested by HOD',
-      message: `HOD requested modifications for "${activity.title}". Notes: ${notes}`,
-      category: 'Approval',
-      priority: 'HIGH',
-      link: `/activities/${activity._id}`
-    });
+    const changeCoordId = activity.coordinatorId?._id || activity.coordinatorId;
+    if (changeCoordId) {
+      await Notification.createIdempotent({
+        recipientId: changeCoordId,
+        senderId: user._id,
+        title: 'Activity Changes Requested by HOD',
+        message: `HOD requested modifications for "${activity.title}". Notes: ${notes}`,
+        category: 'Approval',
+        priority: 'HIGH',
+        link: `/activities/${activity._id}`
+      });
+    }
 
     await activity.save();
     await logAudit({
@@ -640,15 +649,18 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
   await activity.save();
 
   // Notify Faculty
-  await Notification.createIdempotent({
-    recipientId: activity.coordinatorId._id,
-    senderId: user._id,
-    title: 'Activity Proposal Rejected by Admin',
-    message: `Your activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason}`,
-    category: 'Approval',
-    priority: 'HIGH',
-    link: `/activities/${activity._id}`
-  });
+  const adminRejectCoordId = activity.coordinatorId?._id || activity.coordinatorId;
+  if (adminRejectCoordId) {
+    await Notification.createIdempotent({
+      recipientId: adminRejectCoordId,
+      senderId: user._id,
+      title: 'Activity Proposal Rejected by Admin',
+      message: `Your activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason}`,
+      category: 'Approval',
+      priority: 'HIGH',
+      link: `/activities/${activity._id}`
+    });
+  }
 
   // Notify HOD
   const hodRecipientId = activity.hodId?._id || activity.hodForwardedBy;
@@ -723,15 +735,18 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
   await activity.save();
 
   // Notify Faculty
-  await Notification.createIdempotent({
-    recipientId: activity.coordinatorId._id,
-    senderId: user._id,
-    title: 'Corrections Requested by Admin',
-    message: `Admin requested changes for "${activity.title}". Notes: ${notes}`,
-    category: 'Approval',
-    priority: 'HIGH',
-    link: `/activities/${activity._id}`
-  });
+  const adminChangeCoordId = activity.coordinatorId?._id || activity.coordinatorId;
+  if (adminChangeCoordId) {
+    await Notification.createIdempotent({
+      recipientId: adminChangeCoordId,
+      senderId: user._id,
+      title: 'Corrections Requested by Admin',
+      message: `Admin requested changes for "${activity.title}". Notes: ${notes}`,
+      category: 'Approval',
+      priority: 'HIGH',
+      link: `/activities/${activity._id}`
+    });
+  }
 
   // Notify HOD
   const hodRecipientId = activity.hodId?._id || activity.hodForwardedBy;

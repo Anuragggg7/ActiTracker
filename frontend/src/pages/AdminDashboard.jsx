@@ -9,7 +9,7 @@ import CreateActivityModal from '../components/CreateActivityModal';
 import {
   Users, Building, Clock, ShieldAlert, Plus, AlertTriangle, CheckCircle, XCircle,
   Search, RefreshCw, Eye, EyeOff, CheckSquare, Send, RotateCcw, Calendar, MapPin,
-  DollarSign, MessageSquare, Filter, ShieldCheck
+  DollarSign, MessageSquare, Filter, ShieldCheck, X
 } from 'lucide-react';
 
 export const AdminDashboard = () => {

@@ -9,7 +9,7 @@ import PDFViewerModal from '../components/PDFViewerModal';
 import CreateActivityModal from '../components/CreateActivityModal';
 import {
   Users, CheckSquare, Download, CheckCircle2, XCircle, AlertCircle, Plus,
-  Send, RotateCcw, Clock, Eye, Calendar, MapPin, DollarSign, MessageSquare, ShieldCheck
+  Send, RotateCcw, Clock, Eye, Calendar, MapPin, DollarSign, MessageSquare, ShieldCheck, X
 } from 'lucide-react';
 
 export const HodDashboard = () => {
@@ -92,12 +92,28 @@ export const HodDashboard = () => {
         notes: reviewNotes.trim()
       });
 
-      if (res.success) {
+      if (res && res.success) {
         showToast(res.message || 'Action executed successfully', 'success');
+        const updatedAct = res.activity || {
+          ...selectedActivity,
+          status: activeModal === 'FORWARD' ? 'ADMIN_REVIEW' : activeModal === 'REJECT' ? 'REJECTED' : 'CHANGES_REQUIRED',
+          hodReviewNotes: reviewNotes.trim()
+        };
+
+        // Remove from pending queue immediately
+        setPendingRequests(prev => prev.filter(a => a?._id !== selectedActivity._id));
+
+        // If forwarded, add to forwardedRequests tracker
+        if (activeModal === 'FORWARD') {
+          setForwardedRequests(prev => [updatedAct, ...prev.filter(a => a?._id !== updatedAct._id)]);
+        }
+
         setActiveModal(null);
         setSelectedActivity(null);
         setReviewNotes('');
-        fetchHodData();
+        await fetchHodData();
+      } else {
+        showToast(res?.message || 'Action could not be completed', 'error');
       }
     } catch (err) {
       showToast(err.message || 'Action failed', 'error');
