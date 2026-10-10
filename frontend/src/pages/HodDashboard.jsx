@@ -184,7 +184,13 @@ export const HodDashboard = () => {
                       </span>
                     </div>
                     <h4 className="text-base font-extrabold text-slate-900 dark:text-white mt-1">
-                      {act.title}
+                      <Link
+                        to={`/activities/${act._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors cursor-pointer"
+                        title={act.title}
+                      >
+                        {act.title}
+                      </Link>
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
                       Submitting Coordinator: <strong className="text-slate-800 dark:text-slate-200">{act.coordinatorId?.name}</strong> ({act.coordinatorId?.designation} • {act.coordinatorId?.email})
@@ -291,7 +297,13 @@ export const HodDashboard = () => {
                 {forwardedRequests.map((act) => (
                   <tr key={act._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="p-3 font-extrabold text-slate-900 dark:text-white">
-                      <div>{act.title}</div>
+                      <Link
+                        to={`/activities/${act._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block cursor-pointer"
+                        title={act.title}
+                      >
+                        {act.title}
+                      </Link>
                       <span className="text-[10px] text-rcpit-600 dark:text-rcpit-400 font-bold">{act.category}</span>
                     </td>
                     <td className="p-3 text-slate-600 dark:text-slate-400">

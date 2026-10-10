@@ -449,7 +449,13 @@ export const AdminDashboard = () => {
                           </span>
                         </div>
                         <h4 className="text-base font-extrabold text-slate-900 dark:text-white mt-1">
-                          {act.title}
+                          <Link
+                            to={`/activities/${act._id}`}
+                            className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors cursor-pointer"
+                            title={act.title}
+                          >
+                            {act.title}
+                          </Link>
                         </h4>
                         <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mt-1">
                           <span>
@@ -588,7 +594,17 @@ export const AdminDashboard = () => {
                         )}
                       </div>
                       <h4 className="text-sm font-extrabold text-slate-900 dark:text-white mt-1">
-                        {req.activityId?.title || 'Activity Title'}
+                        {req.activityId?._id ? (
+                          <Link
+                            to={`/activities/${req.activityId._id}`}
+                            className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors cursor-pointer"
+                            title={req.activityId?.title}
+                          >
+                            {req.activityId?.title || 'Activity Title'}
+                          </Link>
+                        ) : (
+                          req.activityId?.title || 'Activity Title'
+                        )}
                       </h4>
                       <p className="text-xs text-slate-500">
                         Requested Date: {new Date(req.requestedDate).toLocaleDateString()} ({req.startTime} - {req.endTime})

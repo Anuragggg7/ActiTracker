@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../api/client';
 import ActionCenter from '../components/ActionCenter';
 import StatusBadge from '../components/StatusBadge';
@@ -76,7 +77,15 @@ export const TpDashboard = () => {
                   <span className="text-[10px] font-bold text-purple-600 uppercase tracking-wider">{act.category}</span>
                   <StatusBadge status={act.status} />
                 </div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">{act.title}</h4>
+                <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                  <Link
+                    to={`/activities/${act._id}`}
+                    className="hover:text-purple-600 dark:hover:text-purple-400 hover:underline transition-colors cursor-pointer"
+                    title={act.title}
+                  >
+                    {act.title}
+                  </Link>
+                </h4>
                 <p className="text-xs text-slate-500 line-clamp-2">{act.description}</p>
                 <div className="flex items-center justify-between text-[11px] text-slate-400 pt-2 border-t border-slate-200 dark:border-slate-700">
                   <span>{new Date(act.date).toLocaleDateString()}</span>

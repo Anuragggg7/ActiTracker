@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -163,7 +164,17 @@ export const SlotManagement = () => {
               <div key={req._id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs">
                 <div>
                   <h4 className="font-extrabold text-slate-900 dark:text-white">
-                    {req.activityId?.title || 'Institutional Activity'}
+                    {req.activityId?._id ? (
+                      <Link
+                        to={`/activities/${req.activityId._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors cursor-pointer"
+                        title={req.activityId?.title}
+                      >
+                        {req.activityId?.title || 'Institutional Activity'}
+                      </Link>
+                    ) : (
+                      req.activityId?.title || 'Institutional Activity'
+                    )}
                   </h4>
                   <p className="text-slate-500 text-[11px] mt-0.5">
                     Requested Venue: <strong className="text-slate-800 dark:text-slate-200">{req.venueId?.name}</strong> • 

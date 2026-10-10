@@ -239,7 +239,13 @@ export const FacultyDashboard = () => {
                 {filteredActivities.map((act) => (
                   <tr key={act._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs truncate">
-                      {act.title}
+                      <Link
+                        to={`/faculty/activities/${act._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block truncate cursor-pointer"
+                        title={act.title}
+                      >
+                        {act.title}
+                      </Link>
                     </td>
                     <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
                       {act.category}

@@ -193,7 +193,13 @@ export const MediaCenter = () => {
                     </div>
 
                     <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white">
-                      {activity.title}
+                      <Link
+                        to={`/activities/${activity._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors cursor-pointer"
+                        title={activity.title}
+                      >
+                        {activity.title}
+                      </Link>
                     </h2>
                     
                     <p className="text-xs text-slate-500 dark:text-slate-400">
