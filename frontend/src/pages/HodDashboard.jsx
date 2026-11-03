@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -7,16 +7,19 @@ import ActionCenter from '../components/ActionCenter';
 import StatusBadge from '../components/StatusBadge';
 import PDFViewerModal from '../components/PDFViewerModal';
 import CreateActivityModal from '../components/CreateActivityModal';
+import AnnualReportManager from '../components/AnnualReportManager';
 import {
   Users, CheckSquare, Download, CheckCircle2, XCircle, AlertCircle, Plus,
   Send, RotateCcw, Clock, Eye, Calendar, MapPin, DollarSign, MessageSquare, ShieldCheck, X,
-  Flame, Zap, Award
+  Flame, Zap, Award, FileText
 } from 'lucide-react';
 
 export const HodDashboard = () => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
+  const location = useLocation();
 
+  const [activeTab, setActiveTab] = useState('activities'); // 'activities' | 'annual-reports'
   const [pendingRequests, setPendingRequests] = useState([]);
   const [forwardedRequests, setForwardedRequests] = useState([]);
   const [deptInfo, setDeptInfo] = useState(null);
@@ -75,20 +78,48 @@ export const HodDashboard = () => {
 
   // Smooth scroll to target activity if opened with hash (e.g., from Action Center)
   useEffect(() => {
-    if (!loading && window.location.hash) {
-      const targetId = window.location.hash.replace('#', '');
-      const el = document.getElementById(targetId);
+    if (loading) return;
+    const hash = location.hash || window.location.hash;
+    if (!hash) return;
+    const targetId = hash.replace(/^#/, '');
+    const cleanId = targetId.replace(/^activity-/, '');
+
+    const tryScroll = () => {
+      const el =
+        document.getElementById(targetId) ||
+        document.getElementById(`activity-${cleanId}`) ||
+        document.getElementById(cleanId) ||
+        document.querySelector(`[data-activity-id="${cleanId}"]`);
+
       if (el) {
-        setTimeout(() => {
+        const headerOffset = 100;
+        const elPos = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+        window.scrollTo({ top: Math.max(0, elPos), behavior: 'smooth' });
+        try {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
-          setTimeout(() => {
-            el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
-          }, 3000);
-        }, 200);
+        } catch (err) {
+          // ignore
+        }
+        el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10', 'transition-all', 'duration-500');
+        setTimeout(() => {
+          el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10');
+        }, 3500);
+        return true;
       }
+      return false;
+    };
+
+    if (!tryScroll()) {
+      const t1 = setTimeout(tryScroll, 150);
+      const t2 = setTimeout(tryScroll, 400);
+      const t3 = setTimeout(tryScroll, 800);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [loading]);
+  }, [loading, location.hash, location.key, pendingRequests]);
 
   const openActionModal = (act, actionType) => {
     setSelectedActivity(act);
@@ -217,11 +248,45 @@ export const HodDashboard = () => {
         </div>
       </div>
 
-      {/* Action Center */}
-      <ActionCenter />
+      {/* Navigation Tabs */}
+      <div className="flex items-center gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+        <button
+          onClick={() => setActiveTab('activities')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-xs transition-all ${
+            activeTab === 'activities'
+              ? 'bg-rcpit-600 text-white shadow-md'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <CheckSquare className="w-4 h-4" /> Activity Proposals & Approvals
+          {pendingRequests.length > 0 && (
+            <span className="ml-1.5 px-2 py-0.5 rounded-full text-[10px] bg-white/20 text-white font-black">
+              {pendingRequests.length}
+            </span>
+          )}
+        </button>
 
-      {/* SECTION 1: Pending Activity Requests (Review & Forward to Admin with Priority) */}
-      <div className="glass-card p-6 space-y-4">
+        <button
+          onClick={() => setActiveTab('annual-reports')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold text-xs transition-all ${
+            activeTab === 'annual-reports'
+              ? 'bg-rcpit-600 text-white shadow-md'
+              : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-800 hover:text-slate-900 dark:hover:text-white'
+          }`}
+        >
+          <FileText className="w-4 h-4" /> Annual Report Generator
+        </button>
+      </div>
+
+      {activeTab === 'annual-reports' ? (
+        <AnnualReportManager />
+      ) : (
+        <>
+          {/* Action Center */}
+          <ActionCenter />
+
+          {/* SECTION 1: Pending Activity Requests (Review & Forward to Admin with Priority) */}
+          <div className="glass-card p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div>
             <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
@@ -248,6 +313,7 @@ export const HodDashboard = () => {
               <div
                 key={act._id}
                 id={`activity-${act._id}`}
+                data-activity-id={act._id}
                 className="scroll-mt-24 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4 transition-all hover:border-rcpit-300 dark:hover:border-slate-600"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
@@ -385,7 +451,7 @@ export const HodDashboard = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {forwardedRequests.map((act) => (
-                  <tr key={act._id} id={`activity-${act._id}`} className="scroll-mt-24 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                  <tr key={act._id} id={`activity-${act._id}`} data-activity-id={act._id} className="scroll-mt-24 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
                     <td className="p-3 font-extrabold text-slate-900 dark:text-white max-w-xs">
                       <Link
                         to={`/activities/${act._id}`}
@@ -436,6 +502,8 @@ export const HodDashboard = () => {
           </div>
         )}
       </div>
+    </>
+  )}
 
       {/* Review Modal: Forward with Priority, Request Changes, or Reject */}
       {activeModal && selectedActivity && (

@@ -25,12 +25,38 @@ export const ActionCenter = () => {
   }, []);
 
   const handleResolve = (e, item) => {
-    const actId = item.activityId || item.id;
+    const rawId = item.activityId || item.id || '';
+    const actId = String(rawId).replace(/^activity-/, '').trim();
     if (!actId) return;
 
-    // Look for target element by activity id in DOM
-    const targetEl = document.getElementById(`activity-${actId}`) || document.getElementById(actId);
+    const findTarget = () => {
+      return (
+        document.getElementById(`activity-${actId}`) ||
+        document.getElementById(actId) ||
+        document.querySelector(`[data-activity-id="${actId}"]`) ||
+        document.querySelector(`[data-id="${actId}"]`)
+      );
+    };
 
+    const highlightAndScroll = (el) => {
+      if (!el) return false;
+      const headerOffset = 100;
+      const elPos = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+      window.scrollTo({ top: Math.max(0, elPos), behavior: 'smooth' });
+      try {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } catch (err) {
+        // ignore
+      }
+
+      el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10', 'transition-all', 'duration-500');
+      setTimeout(() => {
+        el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10');
+      }, 3500);
+      return true;
+    };
+
+    const targetEl = findTarget();
     if (targetEl) {
       e.preventDefault();
       try {
@@ -38,16 +64,22 @@ export const ActionCenter = () => {
       } catch (err) {
         // ignore
       }
-
-      // Smooth scroll to the target activity element
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-
-      // Add high-visibility focus highlight
-      targetEl.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
-      setTimeout(() => {
-        targetEl.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
-      }, 3000);
+      highlightAndScroll(targetEl);
+      return;
     }
+
+    // If not found in DOM yet (e.g. rendering or navigating), poll with retries
+    let attempts = 0;
+    const interval = setInterval(() => {
+      attempts++;
+      const el = findTarget();
+      if (el) {
+        highlightAndScroll(el);
+        clearInterval(interval);
+      } else if (attempts >= 15) {
+        clearInterval(interval);
+      }
+    }, 100);
   };
 
   if (loading) {

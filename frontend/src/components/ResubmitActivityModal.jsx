@@ -48,9 +48,18 @@ export const ResubmitActivityModal = ({ isOpen, onClose, activity, onSuccess }) 
     const fetchVenues = async () => {
       try {
         setLoadingVenues(true);
-        const res = await api.get('/slots/venues');
-        if (res.success) {
-          setVenues(res.venues || []);
+        let res;
+        try {
+          res = await api.get('/slots/venues');
+        } catch {
+          res = await api.get('/venues');
+        }
+        if (res && res.success && Array.isArray(res.venues)) {
+          setVenues(res.venues);
+        } else if (Array.isArray(res)) {
+          setVenues(res);
+        } else if (res && Array.isArray(res.venues)) {
+          setVenues(res.venues);
         }
       } catch (err) {
         console.error('Failed to load venues', err);
@@ -85,7 +94,11 @@ export const ResubmitActivityModal = ({ isOpen, onClose, activity, onSuccess }) 
 
     try {
       setSubmitting(true);
-      const res = await api.post(`/activities/${activity._id}/resubmit`, formData);
+      const payload = {
+        ...formData,
+        venueId: formData.venueId || null
+      };
+      const res = await api.post(`/activities/${activity._id}/resubmit`, payload);
       if (res.success) {
         showToast(res.message || 'Activity resubmitted successfully for review', 'success');
         if (onSuccess) onSuccess();
@@ -220,12 +233,15 @@ export const ResubmitActivityModal = ({ isOpen, onClose, activity, onSuccess }) 
               <select
                 value={formData.venueId}
                 onChange={(e) => setFormData({ ...formData, venueId: e.target.value })}
+                disabled={loadingVenues}
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold"
               >
-                <option value="">Select Venue...</option>
+                <option value="">
+                  {loadingVenues ? 'Loading institutional venues...' : 'Select Venue...'}
+                </option>
                 {venues.map((v) => (
                   <option key={v._id} value={v._id}>
-                    {v.name} (Cap: {v.capacity})
+                    {v.name} (Cap: {v.capacity || 100}{v.location ? ` • ${v.location}` : ''})
                   </option>
                 ))}
               </select>

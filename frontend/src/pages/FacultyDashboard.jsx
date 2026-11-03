@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
@@ -19,6 +19,7 @@ import {
 export const FacultyDashboard = () => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
+  const location = useLocation();
   const [activities, setActivities] = useState([]);
   const [slotOffers, setSlotOffers] = useState([]);
   const [waitingQueue, setWaitingQueue] = useState([]);
@@ -90,20 +91,48 @@ export const FacultyDashboard = () => {
 
   // Smooth scroll to target activity if opened with hash (e.g., from Action Center)
   useEffect(() => {
-    if (!loading && window.location.hash) {
-      const targetId = window.location.hash.replace('#', '');
-      const el = document.getElementById(targetId);
+    if (loading) return;
+    const hash = location.hash || window.location.hash;
+    if (!hash) return;
+    const targetId = hash.replace(/^#/, '');
+    const cleanId = targetId.replace(/^activity-/, '');
+
+    const tryScroll = () => {
+      const el =
+        document.getElementById(targetId) ||
+        document.getElementById(`activity-${cleanId}`) ||
+        document.getElementById(cleanId) ||
+        document.querySelector(`[data-activity-id="${cleanId}"]`);
+
       if (el) {
-        setTimeout(() => {
+        const headerOffset = 100;
+        const elPos = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+        window.scrollTo({ top: Math.max(0, elPos), behavior: 'smooth' });
+        try {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
-          setTimeout(() => {
-            el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
-          }, 3000);
-        }, 200);
+        } catch (err) {
+          // ignore
+        }
+        el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10', 'transition-all', 'duration-500');
+        setTimeout(() => {
+          el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10');
+        }, 3500);
+        return true;
       }
+      return false;
+    };
+
+    if (!tryScroll()) {
+      const t1 = setTimeout(tryScroll, 150);
+      const t2 = setTimeout(tryScroll, 400);
+      const t3 = setTimeout(tryScroll, 800);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [loading]);
+  }, [loading, location.hash, location.key, activities, changesRequestedActivities]);
 
   // Handle Activity or Session Cancellation
   const handleConfirmCancellation = async () => {
@@ -276,6 +305,7 @@ export const FacultyDashboard = () => {
                 <div
                   key={act._id}
                   id={`activity-${act._id}`}
+                  data-activity-id={act._id}
                   className="scroll-mt-24 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
                   <div className="space-y-2 flex-1">
@@ -421,7 +451,7 @@ export const FacultyDashboard = () => {
                     !['COMPLETED', 'ARCHIVED', 'CANCELLED'].includes(act.status);
 
                   return (
-                    <tr key={act._id} id={`activity-${act._id}`} className="scroll-mt-24 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={act._id} id={`activity-${act._id}`} data-activity-id={act._id} className="scroll-mt-24 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
                         <Link
                           to={`/faculty/activities/${act._id}`}
@@ -565,7 +595,7 @@ export const FacultyDashboard = () => {
                   const rejectDate = act.rejectedAt ? new Date(act.rejectedAt).toLocaleDateString() : new Date(act.updatedAt).toLocaleDateString();
 
                   return (
-                    <tr key={act._id} id={`activity-${act._id}`} className="scroll-mt-24 hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-colors">
+                    <tr key={act._id} id={`activity-${act._id}`} data-activity-id={act._id} className="scroll-mt-24 hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-colors">
                       <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
                         <Link
                           to={`/faculty/activities/${act._id}`}

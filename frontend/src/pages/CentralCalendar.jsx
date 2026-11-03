@@ -16,8 +16,8 @@ export const CentralCalendar = () => {
       try {
         setLoading(true);
         const [actRes, venueRes] = await Promise.all([
-          api.get('/activities'),
-          api.get('/venues')
+          api.get('/activities').catch(() => ({ success: false })),
+          api.get('/slots/venues').catch(() => api.get('/venues')).catch(() => ({ success: false }))
         ]);
         if (actRes.success) {
           setActivities(actRes.activities || []);

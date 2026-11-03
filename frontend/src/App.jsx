@@ -24,6 +24,7 @@ import AuditLogs from './pages/AuditLogs';
 import MediaCenter from './pages/MediaCenter';
 import NotificationsView from './pages/NotificationsView';
 import PublicNotifications from './pages/PublicNotifications';
+import AnnualReportManager from './components/AnnualReportManager';
 
 import Home from './pages/Home';
 
@@ -134,6 +135,38 @@ export function App() {
 
                 <Route
                   path="/hod"
+                  element={
+                    <ProtectedRoute allowedRoles={['HOD', 'ADMIN']}>
+                      <HodDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/hod/annual-reports"
+                  element={
+                    <ProtectedRoute allowedRoles={['HOD', 'ADMIN']}>
+                      <AnnualReportManager />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/annual-reports"
+                  element={
+                    <ProtectedRoute allowedRoles={['ADMIN', 'DIRECTOR']}>
+                      <AnnualReportManager />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/annual-reports"
+                  element={
+                    <ProtectedRoute allowedRoles={['HOD', 'ADMIN', 'DIRECTOR']}>
+                      <AnnualReportManager />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/hod-archived-view"
                   element={
                     <ProtectedRoute allowedRoles={['HOD', 'ADMIN']}>
                       <HodDashboard />

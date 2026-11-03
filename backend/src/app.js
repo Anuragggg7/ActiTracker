@@ -19,6 +19,9 @@ import notificationRoutes from './routes/notificationRoutes.js';
 import analyticsRoutes from './routes/analyticsRoutes.js';
 import auditRoutes from './routes/auditRoutes.js';
 import pdfRoutes from './routes/pdfRoutes.js';
+import annualReportRoutes from './routes/annualReportRoutes.js';
+import { getVenues } from './controllers/slotController.js';
+import { protect } from './middleware/authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -96,6 +99,7 @@ app.use('/api/hod', userRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/slots', slotRoutes);
+app.get('/api/venues', protect, getVenues);
 app.use('/api', mediaRoutes);
 app.use('/api', documentRoutes);
 app.use('/api', attendanceRoutes);
@@ -105,6 +109,7 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/audit-logs', auditRoutes);
 app.use('/api/pdf', pdfRoutes);
 app.use('/api', pdfRoutes);
+app.use('/api/annual-reports', annualReportRoutes);
 
 // Serve static assets from frontend/dist if available
 app.use((req, res, next) => {

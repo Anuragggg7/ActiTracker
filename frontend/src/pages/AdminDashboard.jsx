@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import api from '../api/client';
 import ActionCenter from '../components/ActionCenter';
 import StatusBadge from '../components/StatusBadge';
 import { useNotifications } from '../context/NotificationContext';
 import { fetchDepartmentsWithFallback } from '../utils/departments';
 import CreateActivityModal from '../components/CreateActivityModal';
+import AnnualReportManager from '../components/AnnualReportManager';
 import {
   Users, Building, Clock, ShieldAlert, Plus, AlertTriangle, CheckCircle, XCircle,
   Search, RefreshCw, Eye, EyeOff, CheckSquare, Send, RotateCcw, Calendar, MapPin,
-  DollarSign, MessageSquare, Filter, ShieldCheck, X, Flame, Zap, Award, CheckCircle2
+  DollarSign, MessageSquare, Filter, ShieldCheck, X, Flame, Zap, Award, CheckCircle2,
+  FileText
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
   const { showToast } = useNotifications();
-  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals', 'slots', 'reallocation', 'users', 'departments', 'audit'
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals', 'reallocation', 'slots', 'users', 'departments', 'audit', 'annual-reports'
 
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [allApprovalsHistory, setAllApprovalsHistory] = useState([]);
@@ -144,20 +147,48 @@ export const AdminDashboard = () => {
 
   // Smooth scroll to target activity if opened with hash (e.g., from Action Center)
   useEffect(() => {
-    if (!loading && window.location.hash) {
-      const targetId = window.location.hash.replace('#', '');
-      const el = document.getElementById(targetId);
+    if (loading) return;
+    const hash = location.hash || window.location.hash;
+    if (!hash) return;
+    const targetId = hash.replace(/^#/, '');
+    const cleanId = targetId.replace(/^activity-/, '');
+
+    const tryScroll = () => {
+      const el =
+        document.getElementById(targetId) ||
+        document.getElementById(`activity-${cleanId}`) ||
+        document.getElementById(cleanId) ||
+        document.querySelector(`[data-activity-id="${cleanId}"]`);
+
       if (el) {
-        setTimeout(() => {
+        const headerOffset = 100;
+        const elPos = el.getBoundingClientRect().top + window.scrollY - headerOffset;
+        window.scrollTo({ top: Math.max(0, elPos), behavior: 'smooth' });
+        try {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
-          setTimeout(() => {
-            el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
-          }, 3000);
-        }, 200);
+        } catch (err) {
+          // ignore
+        }
+        el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10', 'transition-all', 'duration-500');
+        setTimeout(() => {
+          el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-4', 'bg-amber-500/10');
+        }, 3500);
+        return true;
       }
+      return false;
+    };
+
+    if (!tryScroll()) {
+      const t1 = setTimeout(tryScroll, 150);
+      const t2 = setTimeout(tryScroll, 400);
+      const t3 = setTimeout(tryScroll, 800);
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [loading]);
+  }, [loading, location.hash, location.key, pendingApprovals]);
 
   const openDecisionModal = (act, type) => {
     setSelectedActivity(act);
@@ -392,6 +423,17 @@ export const AdminDashboard = () => {
         >
           <ShieldAlert className="w-4 h-4 text-emerald-400" /> System Audit Trail ({auditLogs.length})
         </button>
+
+        <button
+          onClick={() => setActiveTab('annual-reports')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'annual-reports'
+              ? 'bg-rcpit-600 text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <FileText className="w-4 h-4 text-cyan-400" /> Annual Reports
+        </button>
       </div>
 
       {/* TAB 0: Activity Approval Center (Enhancements E & F) */}
@@ -519,6 +561,7 @@ export const AdminDashboard = () => {
                   <div
                     key={act._id}
                     id={`activity-${act._id}`}
+                    data-activity-id={act._id}
                     className="scroll-mt-24 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4 transition-all hover:border-rcpit-300 dark:hover:border-slate-600"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
@@ -1054,6 +1097,11 @@ export const AdminDashboard = () => {
             </table>
           </div>
         </div>
+      )}
+
+      {/* TAB 6: Annual Report Generator */}
+      {activeTab === 'annual-reports' && (
+        <AnnualReportManager />
       )}
 
       {/* Admin Decision Modal: Approve, Request Changes, Reject (Enhancement F) */}

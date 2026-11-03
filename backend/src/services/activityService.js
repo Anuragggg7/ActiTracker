@@ -1093,7 +1093,7 @@ export const resubmitActivityService = async ({ id, body, user, req }) => {
     validateDescriptionWordCount(description);
   }
 
-  const newVenueId = venueId !== undefined ? venueId : activity.venueId;
+  const newVenueId = venueId !== undefined ? (venueId || null) : activity.venueId;
   const newDate = date ? new Date(date) : activity.date;
   const newStartTime = startTime || activity.startTime;
   const newEndTime = endTime || activity.endTime;
@@ -1136,7 +1136,7 @@ export const resubmitActivityService = async ({ id, body, user, req }) => {
   if (endTime) activity.endTime = newEndTime;
   if (durationHours) activity.durationHours = Number(durationHours);
   if (isAllDay !== undefined) activity.isAllDay = newIsAllDay;
-  if (venueId !== undefined) activity.venueId = venueId;
+  if (venueId !== undefined) activity.venueId = venueId || null;
   if (venueName !== undefined) activity.venueName = venueName;
   if (expectedParticipants !== undefined) activity.expectedParticipants = newExpected;
   if (estimatedBudget !== undefined) activity.estimatedBudget = Number(estimatedBudget);
@@ -1586,7 +1586,7 @@ export const updateActivityService = async ({ id, body, user, req }) => {
     validateDescriptionWordCount(description);
   }
 
-  const newVenueId = venueId !== undefined ? venueId : activity.venueId;
+  const newVenueId = venueId !== undefined ? (venueId || null) : activity.venueId;
   const newDate = date ? new Date(date) : activity.date;
   const newStartTime = startTime || activity.startTime;
   const newEndTime = endTime || activity.endTime;
@@ -1629,7 +1629,7 @@ export const updateActivityService = async ({ id, body, user, req }) => {
   if (endTime) activity.endTime = newEndTime;
   if (durationHours) activity.durationHours = Number(durationHours);
   if (isAllDay !== undefined) activity.isAllDay = newIsAllDay;
-  if (venueId !== undefined) activity.venueId = venueId;
+  if (venueId !== undefined) activity.venueId = venueId || null;
   if (venueName !== undefined) activity.venueName = venueName;
   if (expectedParticipants !== undefined) activity.expectedParticipants = newExpected;
   if (estimatedBudget !== undefined) activity.estimatedBudget = Number(estimatedBudget);
