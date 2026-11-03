@@ -14,6 +14,8 @@ router.use(protect);
 
 router.get('/activities/:id/documents', getActivityDocuments);
 router.post('/activities/:id/documents', multerDoc.single('file'), uploadDocument);
+router.delete('/activities/:id/documents/:docId', deleteDocument);
+
 router.put('/documents/:docId/verify', authorize('HOD', 'ADMIN'), verifyDocument);
 router.delete('/documents/:docId', deleteDocument);
 

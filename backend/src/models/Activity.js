@@ -96,7 +96,7 @@ const activitySchema = new mongoose.Schema(
     },
     budgetCategories: [
       {
-        categoryName: { type: String, required: true }, // e.g. Guest Honorarium, Refreshments, Printing, Travel
+        categoryName: { type: String, required: true },
         estimatedAmount: { type: Number, default: 0 },
         actualAmount: { type: Number, default: 0 },
         notes: { type: String, default: '' }
@@ -162,6 +162,25 @@ const activitySchema = new mongoose.Schema(
       }
     ],
 
+    // Structured Suggested Changes / Change Requests History (CHANGE 3)
+    changeRequests: [
+      {
+        instructions: { type: String, required: true },
+        requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+        requestedByRole: { type: String, enum: ['HOD', 'ADMIN'], required: true },
+        requestedAt: { type: Date, default: Date.now },
+        stage: { type: String, default: 'HOD_REVIEW' },
+        status: { type: String, enum: ['PENDING', 'RESUBMITTED', 'RESOLVED'], default: 'PENDING' },
+        resubmittedAt: { type: Date },
+        facultyNotes: { type: String, default: '' }
+      }
+    ],
+
+    // Archival & Automatic Cleanup of Rejected Activities (CHANGE 4)
+    isArchived: { type: Boolean, default: false },
+    archivedAt: { type: Date },
+    archiveReason: { type: String, default: '' },
+
     // Cancellation Details (Enhancement C)
     cancelledAt: { type: Date },
     cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -169,7 +188,7 @@ const activitySchema = new mongoose.Schema(
 
     // Completeness Score & Lock Status
     reportId: { type: String, default: '' },
-    documentationScore: { type: Number, default: 30 }, // 0 to 100%
+    documentationScore: { type: Number, default: 30 }, // Retained for backward-compatible analytics
     isLocked: { type: Boolean, default: false },
     qrCodeUrl: { type: String, default: '' },
 
@@ -191,5 +210,7 @@ activitySchema.index({ venueId: 1, date: 1, status: 1 });
 activitySchema.index({ coordinatorId: 1 });
 activitySchema.index({ 'sessions.venueId': 1, 'sessions.date': 1, status: 1 });
 activitySchema.index({ hodPriority: 1 });
+activitySchema.index({ isArchived: 1, status: 1 });
+activitySchema.index({ 'changeRequests.status': 1 });
 
 export default mongoose.model('Activity', activitySchema);

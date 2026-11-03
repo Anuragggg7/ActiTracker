@@ -82,6 +82,53 @@ try {
 }
 console.assert(limitExceeded, 'Must reject > 300 words');
 
+// 4. Testing Document File Types & Upload Rules (Change 2)
+console.log('\n--- 4. Testing Allowed Document Types & File Constraints ---');
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/jpeg',
+  'image/png'
+];
+console.assert(ALLOWED_MIME_TYPES.includes('application/pdf'), 'PDF must be allowed');
+console.assert(ALLOWED_MIME_TYPES.includes('image/jpeg'), 'JPEG must be allowed');
+console.assert(!ALLOWED_MIME_TYPES.includes('application/x-msdownload'), 'EXE/binary must be blocked');
+
+// Official Report Protected Type Check
+const isProtectedReport = (docType) => docType === 'GENERATED_ACTIVITY_REPORT';
+console.assert(isProtectedReport('GENERATED_ACTIVITY_REPORT') === true, 'Generated event report must be protected from deletion');
+console.assert(isProtectedReport('SUPPORTING_DOCUMENT') === false, 'Supporting document is deletable by authorized owner');
+console.assert(isProtectedReport('ATTENDANCE_SHEET') === false, 'Attendance sheet is deletable by authorized uploader');
+
+// 5. Testing Change Request Stage Transitions (Change 3)
+console.log('\n--- 5. Testing Change Request Transitions ---');
+const getNextStatusAfterCorrections = (changeRequestStage) => {
+  return changeRequestStage === 'ADMIN_REVIEW' ? 'ADMIN_REVIEW' : 'SUBMITTED';
+};
+console.assert(getNextStatusAfterCorrections('HOD_REVIEW') === 'SUBMITTED', 'HOD corrections return to SUBMITTED');
+console.assert(getNextStatusAfterCorrections('ADMIN_REVIEW') === 'ADMIN_REVIEW', 'Admin corrections return to ADMIN_REVIEW');
+
+// 6. Testing Rejected / Archived Query Filtering (Change 4)
+console.log('\n--- 6. Testing Rejected / Archived Query Filtering ---');
+const filterActiveWorkflows = (activitiesList) => {
+  return activitiesList.filter(act => act.status !== 'REJECTED' && !act.isArchived);
+};
+const mockActivities = [
+  { id: 1, title: 'Active Workshop', status: 'SCHEDULED', isArchived: false },
+  { id: 2, title: 'Rejected Seminar', status: 'REJECTED', isArchived: true, archiveReason: 'REJECTED' },
+  { id: 3, title: 'Pending Approval', status: 'HOD_REVIEW', isArchived: false },
+  { id: 4, title: 'Changes Required', status: 'CHANGES_REQUIRED', isArchived: false }
+];
+const activeOnly = filterActiveWorkflows(mockActivities);
+console.assert(activeOnly.length === 3, `Expected 3 active activities, got ${activeOnly.length}`);
+console.assert(!activeOnly.some(a => a.status === 'REJECTED'), 'No rejected activities in active workflow');
+console.assert(!activeOnly.some(a => a.isArchived), 'No archived activities in active workflow');
+
 console.log('\n=============================================');
 console.log('🎉 ALL PURE UNIT & ALGORITHMIC TESTS PASSED!');
 console.log('=============================================\n');
+

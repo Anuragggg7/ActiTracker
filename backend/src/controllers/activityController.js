@@ -1,6 +1,3 @@
-import Activity from '../models/Activity.js';
-import Media from '../models/Media.js';
-import ActivityReport from '../models/ActivityReport.js';
 import {
   createActivityService,
   getActivitiesService,
@@ -14,26 +11,26 @@ import {
   adminRejectActivityService,
   adminRequestChangesActivityService,
   cancelActivityService,
-  updateActivityStatusService,
   updateActivityService,
+  updateActivityStatusService,
   updateActivityBudgetService,
-  getActivityApprovalsService
+  getActivityApprovalsService,
+  resubmitActivityService,
+  getChangesRequestedActivitiesService,
+  getRejectedActivitiesService
 } from '../services/activityService.js';
 import { getCancellationHistoryService, SlotConflictError } from '../services/slotService.js';
+import Activity from '../models/Activity.js';
+import Media from '../models/Media.js';
+import ActivityReport from '../models/ActivityReport.js';
 
-// Create Activity
+// Create New Activity Proposal
 export const createActivity = async (req, res) => {
   try {
-    const activity = await createActivityService({
-      body: req.body,
-      user: req.user,
-      req
-    });
-
-    const isDraft = req.body.isDraft;
+    const activity = await createActivityService(req.body, req.user._id);
     res.status(201).json({
       success: true,
-      message: isDraft ? 'Activity saved as draft' : 'Activity submitted to HOD for review',
+      message: 'Activity proposal created successfully',
       activity
     });
   } catch (error) {
@@ -41,56 +38,36 @@ export const createActivity = async (req, res) => {
       return res.status(409).json({
         success: false,
         code: 'SLOT_ALREADY_BOOKED',
-        isDuplicate: error.isDuplicate || false,
-        matchingActivity: error.matchingActivity || null,
-        message: error.message || 'This time slot has been booked already!',
+        message: 'This time slot has been booked already!',
         conflictDetails: error.conflictDetails,
         alternativeSlots: error.alternativeSlots
       });
     }
-    res.status(error.statusCode || 500).json({
-      success: false,
-      message: error.message,
-      venueCapacityExceeded: error.venueCapacityExceeded || false,
-      configuredCapacity: error.configuredCapacity,
-      requestedCount: error.requestedCount,
-      alternativeVenues: error.alternativeVenues || []
-    });
+    res.status(error.statusCode || 500).json({ success: false, message: error.message, alternativeVenues: error.alternativeVenues });
   }
 };
 
-// Get Activities (Filtered by Role & Department Isolation)
+// Get Activities with Role-Based Isolation
 export const getActivities = async (req, res) => {
   try {
-    const activities = await getActivitiesService({
-      query: req.query,
-      user: req.user
-    });
-
+    const activities = await getActivitiesService({ query: req.query, user: req.user });
     res.json({ success: true, count: activities.length, activities });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
-// Get Activity Details by ID (With Access Control)
+// Get Single Activity by ID
 export const getActivityById = async (req, res) => {
   try {
-    const data = await getActivityByIdService({
-      id: req.params.id,
-      user: req.user
-    });
-
-    res.json({
-      success: true,
-      ...data
-    });
+    const result = await getActivityByIdService({ id: req.params.id, user: req.user });
+    res.json({ success: true, ...result });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };
 
-// Get Pending HOD Activities for Department
+// Get Pending Activities for HOD
 export const getPendingHodActivities = async (req, res) => {
   try {
     const activities = await getPendingHodActivitiesService({ user: req.user });
@@ -220,7 +197,7 @@ export const adminApproveActivity = async (req, res) => {
   }
 };
 
-// Admin Rejection (Enhancement F)
+// Admin Rejection (Enhancement F & Change 4)
 export const adminRejectActivity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -239,7 +216,7 @@ export const adminRejectActivity = async (req, res) => {
   }
 };
 
-// Admin Request Changes
+// Admin Request Changes (Change 3)
 export const adminRequestChangesActivity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -258,7 +235,49 @@ export const adminRequestChangesActivity = async (req, res) => {
   }
 };
 
-// Cancel Activity Booking (Enhancement C: Immediate slot release and FCFS waiting queue trigger)
+// Resubmit Activity with Corrections (Change 3)
+export const resubmitActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await resubmitActivityService({
+      id,
+      body: req.body,
+      user: req.user,
+      req
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Get Changes Requested Activities (Change 3)
+export const getChangesRequestedActivities = async (req, res) => {
+  try {
+    const activities = await getChangesRequestedActivitiesService({
+      user: req.user,
+      query: req.query
+    });
+    res.json({ success: true, count: activities.length, activities });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Get Rejected Activities (Change 4)
+export const getRejectedActivities = async (req, res) => {
+  try {
+    const activities = await getRejectedActivitiesService({
+      user: req.user,
+      query: req.query
+    });
+    res.json({ success: true, count: activities.length, activities });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Cancel Activity Booking (Enhancement C)
 export const cancelActivity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -292,27 +311,7 @@ export const getCancellationHistory = async (req, res) => {
   }
 };
 
-// Transition Event Status with State Machine & Role Security Validation
-export const updateActivityStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { newStatus, notes } = req.body;
-
-    const activity = await updateActivityStatusService({
-      id,
-      newStatus,
-      notes,
-      user: req.user,
-      req
-    });
-
-    res.json({ success: true, message: `Activity status updated to ${newStatus}`, activity });
-  } catch (error) {
-    res.status(error.statusCode || 500).json({ success: false, message: error.message });
-  }
-};
-
-// Edit Activity Details
+// Update Activity Details
 export const updateActivity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -334,6 +333,26 @@ export const updateActivity = async (req, res) => {
         alternativeSlots: error.alternativeSlots
       });
     }
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Update Activity Status via State Machine
+export const updateActivityStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    const activity = await updateActivityStatusService({
+      id,
+      newStatus: status,
+      notes,
+      user: req.user,
+      req
+    });
+
+    res.json({ success: true, message: `Status updated to ${status}`, activity });
+  } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }
 };

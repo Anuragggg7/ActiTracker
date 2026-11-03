@@ -8,10 +8,12 @@ import StatusBadge from '../components/StatusBadge';
 import QRCodeModal from '../components/QRCodeModal';
 import PDFViewerModal from '../components/PDFViewerModal';
 import CreateActivityModal from '../components/CreateActivityModal';
+import ResubmitActivityModal from '../components/ResubmitActivityModal';
 import {
   Plus, Calendar, CheckSquare, Clock, FileText, QrCode, Download,
   Layers, Search, AlertCircle, ArrowRight, Eye, XCircle, CheckCircle2,
-  Bell, AlertTriangle, ShieldCheck, X
+  Bell, AlertTriangle, ShieldCheck, X, Sparkles, MapPin, RotateCcw,
+  Archive, Edit3, ChevronRight, MessageSquare
 } from 'lucide-react';
 
 export const FacultyDashboard = () => {
@@ -20,11 +22,14 @@ export const FacultyDashboard = () => {
   const [activities, setActivities] = useState([]);
   const [slotOffers, setSlotOffers] = useState([]);
   const [waitingQueue, setWaitingQueue] = useState([]);
+  const [changesRequestedActivities, setChangesRequestedActivities] = useState([]);
+  const [rejectedActivities, setRejectedActivities] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedQrActivity, setSelectedQrActivity] = useState(null);
   const [selectedPdfActivityId, setSelectedPdfActivityId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedResubmitActivity, setSelectedResubmitActivity] = useState(null);
 
   // Cancellation Modal State (Enhancement C)
   const [cancellingActivity, setCancellingActivity] = useState(null);
@@ -49,10 +54,12 @@ export const FacultyDashboard = () => {
   const fetchFacultyData = async () => {
     try {
       setLoading(true);
-      const [actRes, offersRes, queueRes] = await Promise.all([
+      const [actRes, offersRes, queueRes, changesRes, rejectedRes] = await Promise.all([
         api.get('/activities').catch(() => ({ success: false })),
         api.get('/slots/offers').catch(() => ({ success: false })),
-        api.get('/slots/waiting-queue').catch(() => ({ success: false }))
+        api.get('/slots/waiting-queue').catch(() => ({ success: false })),
+        api.get('/activities/changes-requested').catch(() => ({ success: false })),
+        api.get('/activities/rejected').catch(() => ({ success: false }))
       ]);
 
       if (actRes && actRes.success) {
@@ -63,6 +70,12 @@ export const FacultyDashboard = () => {
       }
       if (queueRes && queueRes.success) {
         setWaitingQueue(queueRes.waitingQueue || []);
+      }
+      if (changesRes && changesRes.success) {
+        setChangesRequestedActivities(changesRes.activities || []);
+      }
+      if (rejectedRes && rejectedRes.success) {
+        setRejectedActivities(rejectedRes.activities || []);
       }
     } catch (err) {
       console.error(err);
@@ -213,13 +226,101 @@ export const FacultyDashboard = () => {
         </div>
       )}
 
+      {/* CHANGES REQUESTED SECTION (Change 3) */}
+      {changesRequestedActivities.length > 0 && (
+        <div className="p-6 rounded-3xl bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent border-2 border-amber-500/40 shadow-xl space-y-4 animate-fade-in">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/60 dark:border-amber-800/60 pb-3">
+            <div className="flex items-center gap-2.5 text-amber-800 dark:text-amber-300">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0 animate-pulse" />
+              <div>
+                <h3 className="font-extrabold text-sm uppercase tracking-wider">
+                  Changes Requested by Reviewing Authority ({changesRequestedActivities.length})
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                  Review the feedback instructions below, apply necessary corrections, and resubmit for approval.
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-extrabold text-[11px] border border-amber-300 dark:border-amber-700 self-start sm:self-auto">
+              Action Required
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {changesRequestedActivities.map((act) => {
+              const latestCR = act.changeRequests?.slice()?.reverse()?.find(cr => cr.status === 'PENDING') 
+                || act.changeRequests?.[act.changeRequests?.length - 1];
+              const reviewerName = latestCR?.requestedBy?.name || (act.hodReviewNotes ? 'Department HOD' : 'Institutional Admin');
+              const reviewerRole = latestCR?.requestedByRole || (act.hodReviewNotes ? 'HOD' : 'ADMIN');
+              const instructions = latestCR?.instructions || act.adminReviewNotes || act.hodReviewNotes || 'Please review and modify activity details.';
+              const requestDate = latestCR?.requestedAt ? new Date(latestCR.requestedAt).toLocaleString() : new Date(act.updatedAt).toLocaleString();
+
+              return (
+                <div
+                  key={act._id}
+                  className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                >
+                  <div className="space-y-2 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="font-black text-sm text-slate-900 dark:text-white">
+                        {act.title}
+                      </h4>
+                      <StatusBadge status={act.status} />
+                      <span className="text-[11px] font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-2.5 py-0.5 rounded-lg border border-amber-200 dark:border-amber-800">
+                        Requested by: {reviewerName} ({reviewerRole})
+                      </span>
+                      <span className="text-[10px] text-slate-400">
+                        • {requestDate}
+                      </span>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-xs">
+                      <span className="font-extrabold text-amber-900 dark:text-amber-300 block mb-1 flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" /> Reviewer Feedback & Instructions:
+                      </span>
+                      <p className="text-slate-800 dark:text-slate-200 whitespace-pre-line font-medium leading-relaxed">
+                        "{instructions}"
+                      </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-500">
+                      <span><strong>Venue:</strong> {act.venueName || act.venueId?.name || 'TBD'}</span>
+                      <span>•</span>
+                      <span><strong>Date:</strong> {new Date(act.date).toLocaleDateString()}</span>
+                      <span>•</span>
+                      <span><strong>Time:</strong> {act.isAllDay ? 'All-Day' : `${act.startTime} - ${act.endTime}`}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex sm:flex-col items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedResubmitActivity(act)}
+                      className="w-full px-4 py-2.5 bg-rcpit-600 hover:bg-rcpit-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" /> Update & Resubmit Activity
+                    </button>
+                    <Link
+                      to={`/faculty/activities/${act._id}`}
+                      className="w-full px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all text-center"
+                    >
+                      View Details
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Action Center Widget */}
       <ActionCenter />
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="glass-card p-5 space-y-1">
-          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Activities</span>
+          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Total Active</span>
           <p className="text-2xl font-black text-slate-900 dark:text-white">{activities.length}</p>
         </div>
         <div className="glass-card p-5 space-y-1">
@@ -229,15 +330,21 @@ export const FacultyDashboard = () => {
           </p>
         </div>
         <div className="glass-card p-5 space-y-1">
+          <span className="text-xs text-rose-600 font-bold uppercase tracking-wider">Changes Required</span>
+          <p className="text-2xl font-black text-rose-600">
+            {changesRequestedActivities.length}
+          </p>
+        </div>
+        <div className="glass-card p-5 space-y-1">
           <span className="text-xs text-sky-600 font-bold uppercase tracking-wider">Scheduled Events</span>
           <p className="text-2xl font-black text-sky-600">
             {activities.filter(a => a.status === 'SCHEDULED').length}
           </p>
         </div>
         <div className="glass-card p-5 space-y-1">
-          <span className="text-xs text-emerald-600 font-bold uppercase tracking-wider">Completed & Archived</span>
-          <p className="text-2xl font-black text-emerald-600">
-            {activities.filter(a => ['COMPLETED', 'ARCHIVED'].includes(a.status)).length}
+          <span className="text-xs text-slate-500 font-bold uppercase tracking-wider">Rejected Archive</span>
+          <p className="text-2xl font-black text-slate-600 dark:text-slate-400">
+            {rejectedActivities.length}
           </p>
         </div>
       </div>
@@ -287,7 +394,6 @@ export const FacultyDashboard = () => {
                   <th className="pb-3 px-2">Category</th>
                   <th className="pb-3 px-2">Schedule & Venue</th>
                   <th className="pb-3 px-2">Lifecycle Status</th>
-                  <th className="pb-3 px-2">Doc Score</th>
                   <th className="pb-3 px-2 text-right">Actions</th>
                 </tr>
               </thead>
@@ -345,9 +451,6 @@ export const FacultyDashboard = () => {
                       <td className="py-3.5 px-2">
                         <StatusBadge status={act.status} />
                       </td>
-                      <td className="py-3.5 px-2 font-bold text-rcpit-600">
-                        {act.documentationScore}%
-                      </td>
                       <td className="py-3.5 px-2 text-right space-x-1">
                         <Link
                           to={`/faculty/activities/${act._id}`}
@@ -390,6 +493,99 @@ export const FacultyDashboard = () => {
                             </button>
                           </>
                         )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* REJECTED ACTIVITIES / ARCHIVE (Change 4) */}
+      <div className="glass-card p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3">
+          <div className="flex items-center gap-2">
+            <Archive className="w-5 h-5 text-slate-500" />
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                Rejected Activities / Archive
+                <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold">
+                  {rejectedActivities.length}
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Archived records automatically removed from active booking workflows and scheduling queues.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {rejectedActivities.length === 0 ? (
+          <div className="py-8 text-center text-xs text-slate-400">
+            No rejected or archived activity proposals found.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
+                  <th className="pb-3 px-2">Activity Title</th>
+                  <th className="pb-3 px-2">Category</th>
+                  <th className="pb-3 px-2">Rejection Reason</th>
+                  <th className="pb-3 px-2">Rejected By</th>
+                  <th className="pb-3 px-2">Rejection Date</th>
+                  <th className="pb-3 px-2 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {rejectedActivities.map((act) => {
+                  const rejectorName = act.rejectedBy?.name || (act.adminReviewNotes ? 'Admin Reviewer' : 'Department HOD');
+                  const rejectorRole = act.rejectedBy?.role || (act.adminReviewNotes ? 'ADMIN' : 'HOD');
+                  const reason = act.rejectionReason || act.adminReviewNotes || act.hodReviewNotes || 'Institutional proposal criteria not satisfied.';
+                  const rejectDate = act.rejectedAt ? new Date(act.rejectedAt).toLocaleDateString() : new Date(act.updatedAt).toLocaleDateString();
+
+                  return (
+                    <tr key={act._id} className="hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-colors">
+                      <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
+                        <Link
+                          to={`/faculty/activities/${act._id}`}
+                          className="hover:text-rose-600 dark:hover:text-rose-400 hover:underline transition-colors block truncate"
+                          title={act.title}
+                        >
+                          {act.title}
+                        </Link>
+                        <span className="text-[10px] text-slate-400 block truncate mt-0.5">
+                          {act.venueName || 'Venue TBD'} • {new Date(act.date).toLocaleDateString()}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
+                        {act.category}
+                      </td>
+                      <td className="py-3.5 px-2 max-w-xs">
+                        <div className="p-2 rounded-lg bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-700 dark:text-rose-300 font-medium line-clamp-2" title={reason}>
+                          {reason}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-2">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 block text-xs">
+                          {rejectorName}
+                        </span>
+                        <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">
+                          {rejectorRole}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-2 text-slate-500 text-xs">
+                        {rejectDate}
+                      </td>
+                      <td className="py-3.5 px-2 text-right">
+                        <Link
+                          to={`/faculty/activities/${act._id}`}
+                          className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs inline-flex items-center gap-1 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" /> Details
+                        </Link>
                       </td>
                     </tr>
                   );
@@ -506,6 +702,17 @@ export const FacultyDashboard = () => {
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSuccess={fetchFacultyData}
+      />
+
+      {/* Activity Resubmission Modal (Change 3) */}
+      <ResubmitActivityModal
+        isOpen={!!selectedResubmitActivity}
+        onClose={() => setSelectedResubmitActivity(null)}
+        activity={selectedResubmitActivity}
+        onSuccess={() => {
+          setSelectedResubmitActivity(null);
+          fetchFacultyData();
+        }}
       />
 
     </div>

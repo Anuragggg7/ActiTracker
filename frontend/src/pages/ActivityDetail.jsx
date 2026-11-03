@@ -4,13 +4,14 @@ import api, { getApiUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import StatusBadge from '../components/StatusBadge';
-import CompletenessScoreWidget from '../components/CompletenessScoreWidget';
 import QRCodeModal from '../components/QRCodeModal';
 import PDFViewerModal from '../components/PDFViewerModal';
+import DocumentDropzone from '../components/DocumentDropzone';
+import ResubmitActivityModal from '../components/ResubmitActivityModal';
 import {
   ArrowLeft, Calendar, MapPin, Clock, Users, DollarSign, FileText,
   Camera, Video, Upload, Download, QrCode, CheckCircle, AlertTriangle, Lock,
-  ShieldCheck, Award, MessageSquare, History, Plus, RefreshCw, Star, Trash2, Check, X, FileSpreadsheet, Eye, Play, XCircle, AlertCircle
+  ShieldCheck, Award, MessageSquare, History, Plus, RefreshCw, Star, Trash2, Check, X, FileSpreadsheet, Eye, Play, XCircle, AlertCircle, RotateCcw
 } from 'lucide-react';
 
 export const ActivityDetail = () => {
@@ -29,12 +30,17 @@ export const ActivityDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showQrModal, setShowQrModal] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
+  const [showResubmitModal, setShowResubmitModal] = useState(false);
 
   // Cancellation Modal State
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelSessionId, setCancelSessionId] = useState('');
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
+
+  // Document Delete Confirmation Modal State (Change 2)
+  const [deletingDoc, setDeletingDoc] = useState(null);
+  const [isDeletingDocLoading, setIsDeletingDocLoading] = useState(false);
 
   // Lightbox Media Viewer State
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(null);
@@ -49,13 +55,6 @@ export const ActivityDetail = () => {
   // Media Rejection Reason Modal
   const [rejectingMediaId, setRejectingMediaId] = useState(null);
   const [mediaRejectReason, setMediaRejectReason] = useState('');
-
-  // Upload Document State
-  const [showDocModal, setShowDocModal] = useState(false);
-  const [docType, setDocType] = useState('EVENT_REPORT');
-  const [docFile, setDocFile] = useState(null);
-  const [docDescription, setDocDescription] = useState('');
-  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   // Add Attendance Participant State
   const [showAddParticipantModal, setShowAddParticipantModal] = useState(false);
@@ -96,6 +95,14 @@ export const ActivityDetail = () => {
   // HOD Review Notes
   const [reviewNotes, setReviewNotes] = useState('');
   const [reviewActioning, setReviewActioning] = useState(false);
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return 'N/A';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+  };
 
   const fetchActivityData = async () => {
     if (!id || id === 'undefined') {
@@ -197,6 +204,24 @@ export const ActivityDetail = () => {
     }
   };
 
+  // Document Deletion Handler (Change 2)
+  const handleDeleteDocument = async () => {
+    if (!deletingDoc) return;
+    try {
+      setIsDeletingDocLoading(true);
+      const res = await api.delete(`/documents/${deletingDoc._id}`);
+      if (res.success) {
+        showToast(res.message || 'Document deleted successfully', 'success');
+        setDeletingDoc(null);
+        fetchActivityData();
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || err.message || 'Failed to delete document', 'error');
+    } finally {
+      setIsDeletingDocLoading(false);
+    }
+  };
+
   // Upload Media Handler (Images or Video)
   const handleMediaUpload = async (e) => {
     e.preventDefault();
@@ -260,38 +285,6 @@ export const ActivityDetail = () => {
       }
     } catch (err) {
       showToast(err.message || 'Failed to delete media', 'error');
-    }
-  };
-
-  // Upload Document Handler (With Versioning)
-  const handleDocUpload = async (e) => {
-    e.preventDefault();
-    if (!docFile) {
-      showToast('Please select a document file to upload', 'warning');
-      return;
-    }
-    try {
-      setUploadingDoc(true);
-      const formData = new FormData();
-      formData.append('file', docFile);
-      formData.append('documentType', docType);
-      formData.append('description', docDescription);
-
-      const res = await api.post(`/activities/${id}/documents`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-
-      if (res.success) {
-        showToast(res.message || 'Document uploaded successfully', 'success');
-        setShowDocModal(false);
-        setDocFile(null);
-        setDocDescription('');
-        fetchActivityData();
-      }
-    } catch (err) {
-      showToast(err.message || 'Document upload failed', 'error');
-    } finally {
-      setUploadingDoc(false);
     }
   };
 
@@ -419,7 +412,11 @@ export const ActivityDetail = () => {
 
   const isHodOrAdmin = ['HOD', 'ADMIN', 'DIRECTOR'].includes(user?.role);
   const isCoordinator = user?._id === (activity.coordinatorId?._id || activity.coordinatorId);
-  const canCancel = !['CANCELLED', 'COMPLETED', 'ARCHIVED'].includes(activity.status) && (isCoordinator || isHodOrAdmin);
+  const canCancel = !['CANCELLED', 'COMPLETED', 'ARCHIVED', 'REJECTED'].includes(activity.status) && (isCoordinator || isHodOrAdmin);
+
+  // Latest change request
+  const latestChangeRequest = activity.changeRequests?.slice()?.reverse()?.find(cr => cr.status === 'PENDING')
+    || activity.changeRequests?.[activity.changeRequests.length - 1];
 
   // Word count calculation
   const descWordCount = activity.description ? activity.description.trim().split(/\s+/).filter(Boolean).length : 0;
@@ -437,6 +434,15 @@ export const ActivityDetail = () => {
         </button>
 
         <div className="flex items-center gap-3 flex-wrap">
+          {activity.status === 'CHANGES_REQUIRED' && isCoordinator && (
+            <button
+              onClick={() => setShowResubmitModal(true)}
+              className="px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-md transition-all"
+            >
+              <RotateCcw className="w-4 h-4" /> Update & Resubmit Activity
+            </button>
+          )}
+
           {canCancel && (
             <button
               onClick={() => {
@@ -479,6 +485,43 @@ export const ActivityDetail = () => {
         </div>
       </div>
 
+      {/* Suggested Changes Callout Banner (Change 3) */}
+      {activity.status === 'CHANGES_REQUIRED' && (
+        <div className="p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-300 dark:border-amber-700/80 shadow-md space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-amber-900 dark:text-amber-200">
+              <div className="p-2 rounded-xl bg-amber-500 text-slate-950 font-black shrink-0">
+                <RotateCcw className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm uppercase tracking-wider">
+                  Corrections & Modifications Requested
+                </h3>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                  Requested by <strong>{latestChangeRequest?.requestedBy?.name || latestChangeRequest?.requestedByRole || 'Reviewing Authority'}</strong> on {latestChangeRequest?.requestedAt ? new Date(latestChangeRequest.requestedAt).toLocaleString() : 'Recent'}
+                </p>
+              </div>
+            </div>
+
+            {isCoordinator && (
+              <button
+                onClick={() => setShowResubmitModal(true)}
+                className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black rounded-xl text-xs shadow-md transition-all self-start sm:self-auto"
+              >
+                Update & Resubmit Activity
+              </button>
+            )}
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white/90 dark:bg-slate-900/90 border border-amber-200 dark:border-amber-800 text-xs text-slate-800 dark:text-slate-200">
+            <span className="font-bold uppercase tracking-wider text-[10px] text-amber-600 dark:text-amber-400 block mb-1">Specific Instructions:</span>
+            <p className="whitespace-pre-line leading-relaxed">
+              "{latestChangeRequest?.instructions || activity.adminReviewNotes || activity.hodReviewNotes || 'Please update the requested fields and resubmit.'}"
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Cancellation Banner if CANCELLED */}
       {activity.status === 'CANCELLED' && (
         <div className="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-800 flex items-start gap-4 shadow-sm">
@@ -499,25 +542,28 @@ export const ActivityDetail = () => {
         </div>
       )}
 
-      {/* Rejection Banner if REJECTED */}
-      {(activity.status === 'REJECTED' || activity.rejectionReason) && activity.status !== 'CANCELLED' && (
-        <div className="p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-300 dark:border-amber-800 flex items-start gap-4 shadow-sm">
-          <div className="p-2.5 rounded-2xl bg-amber-600 text-white shrink-0 mt-0.5">
+      {/* Rejection Banner if REJECTED (Change 4) */}
+      {(activity.status === 'REJECTED' || activity.rejectionReason) && activity.status !== 'CANCELLED' && activity.status !== 'CHANGES_REQUIRED' && (
+        <div className="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-800 flex items-start gap-4 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-rose-600 text-white shrink-0 mt-0.5">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div className="space-y-1 text-xs">
-            <h3 className="font-extrabold text-sm text-amber-900 dark:text-amber-200">
-              Proposal Returned / Rejected with Institutional Feedback
+            <h3 className="font-extrabold text-sm text-rose-900 dark:text-rose-200">
+              Activity Proposal Rejected & Archived
             </h3>
-            <p className="text-amber-800 dark:text-amber-300">
+            <p className="text-rose-800 dark:text-rose-300">
               <strong>Mandatory Rejection Reason:</strong> {activity.rejectionReason}
             </p>
+            <p className="text-[11px] text-rose-600 dark:text-rose-400">
+              This proposal has been archived from active queues. Its details remain accessible for compliance review and audit records.
+            </p>
             {activity.rejectionHistory && activity.rejectionHistory.length > 0 && (
-              <div className="pt-2 text-[11px] text-amber-700 dark:text-amber-400 space-y-1 border-t border-amber-200 dark:border-amber-800/60 mt-2">
+              <div className="pt-2 text-[11px] text-rose-700 dark:text-rose-400 space-y-1 border-t border-rose-200 dark:border-rose-800/60 mt-2">
                 <span className="font-bold uppercase tracking-wider block">Rejection Audit Log:</span>
                 {activity.rejectionHistory.map((rh, idx) => (
                   <div key={idx}>
-                    • [{rh.rejectedByRole}] {rh.reason} ({new Date(rh.rejectedAt).toLocaleString()})
+                    • [{rh.role || 'Reviewer'}] {rh.reason} ({new Date(rh.rejectedAt).toLocaleString()})
                   </div>
                 ))}
               </div>
@@ -526,7 +572,7 @@ export const ActivityDetail = () => {
         </div>
       )}
 
-      {/* Main Activity Header Banner */}
+      {/* Main Activity Header Banner (Change 1: Completeness Scorecard Removed) */}
       <div className="glass-card p-6 md:p-8 space-y-6 relative overflow-hidden">
         {activity.isLocked && (
           <div className="absolute top-0 right-0 bg-amber-500 text-slate-950 font-black text-[10px] uppercase px-4 py-1 rounded-bl-xl flex items-center gap-1 shadow">
@@ -535,7 +581,7 @@ export const ActivityDetail = () => {
         )}
 
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-          <div className="space-y-2 max-w-3xl">
+          <div className="space-y-2 max-w-4xl">
             <div className="flex items-center gap-2.5 flex-wrap">
               <StatusBadge status={activity.status} />
               
@@ -582,19 +628,6 @@ export const ActivityDetail = () => {
               Coordinator: <span className="font-bold text-slate-800 dark:text-slate-200">{activity.coordinatorId?.name}</span> ({activity.coordinatorId?.designation})
             </p>
           </div>
-
-          <CompletenessScoreWidget
-            score={activity.documentationScore || 0}
-            checklist={[
-              { label: 'Activity Created & Proposed', done: true },
-              { label: 'HOD Department Review & Forwarded', done: ['ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
-              { label: 'Admin Institutional Final Approval', done: ['ADMIN_APPROVED', 'HOD_APPROVED', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
-              { label: 'Slot Allocation Confirmed', done: ['SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'REPORT_PENDING', 'VERIFICATION', 'COMPLETED'].includes(activity.status) },
-              { label: 'Attendance Records Logged', done: attendance.stats.total > 0 },
-              { label: 'Geo-Tagged Photographs Uploaded', done: media.some(m => m.mediaType?.toUpperCase() === 'IMAGE') },
-              { label: 'Verified Event Report Uploaded', done: report?.status === 'VERIFIED' || activity.status === 'COMPLETED' }
-            ]}
-          />
         </div>
 
         {/* Quick Meta Stats Grid */}
@@ -710,13 +743,13 @@ export const ActivityDetail = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {activity.sessions.map((sess) => {
+                    {activity.sessions.map((sess, idx) => {
                       const isSessCancelled = sess.status === 'CANCELLED' || activity.status === 'CANCELLED';
                       return (
-                        <tr key={sess._id || sess.sessionNumber} className={isSessCancelled ? 'opacity-60 bg-rose-50/20' : ''}>
-                          <td className="py-3 px-3 font-bold text-slate-500">#{sess.sessionNumber}</td>
+                        <tr key={sess._id || idx} className={isSessCancelled ? 'opacity-60 bg-rose-50/20' : ''}>
+                          <td className="py-3 px-3 font-bold text-slate-500">#{sess.sessionNumber || (idx + 1)}</td>
                           <td className="py-3 px-3 font-black text-slate-900 dark:text-white">
-                            {sess.title || `Session ${sess.sessionNumber}`}
+                            {sess.title || sess.sessionTitle || `Session ${sess.sessionNumber || (idx + 1)}`}
                           </td>
                           <td className="py-3 px-3 text-slate-700 dark:text-slate-300 font-semibold">
                             {new Date(sess.date).toLocaleDateString()}
@@ -1013,7 +1046,7 @@ export const ActivityDetail = () => {
         </div>
       )}
 
-      {/* TAB: DOCUMENTS */}
+      {/* TAB: DOCUMENTS (Change 2: Drag-and-Drop & Document Delete Management) */}
       {activeTab === 'documents' && (
         <div className="space-y-6">
           
@@ -1024,7 +1057,7 @@ export const ActivityDetail = () => {
                 <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
                   <Award className="w-4 h-4 text-rcpit-600" /> Generated Official Institutional Reports
                 </h3>
-                <p className="text-[11px] text-slate-400">Official accreditation-ready PDF records with institutional versioning</p>
+                <p className="text-[11px] text-slate-400">Official accreditation-ready PDF records with institutional versioning (Protected)</p>
               </div>
 
               {(report?.status === 'VERIFIED' || ['COMPLETED', 'ARCHIVED'].includes(activity?.status)) && (
@@ -1057,7 +1090,7 @@ export const ActivityDetail = () => {
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-400 mt-0.5">
-                          Generated by <strong>{doc.uploadedBy?.name || 'System'}</strong> on {new Date(doc.createdAt).toLocaleString()}
+                          Generated by <strong>{doc.uploadedBy?.name || 'System'}</strong> on {new Date(doc.createdAt).toLocaleString()} • {formatFileSize(doc.fileSize)}
                         </p>
                       </div>
                     </div>
@@ -1082,57 +1115,92 @@ export const ActivityDetail = () => {
             )}
           </div>
 
-          {/* Section B: Uploaded Attachments & Supporting Documents */}
+          {/* Section B: Modern Drag-and-Drop File Upload (Change 2) */}
+          {user?.role !== 'DIRECTOR' && !activity.isLocked && activity.status !== 'COMPLETED' && (
+            <div className="glass-card p-6 space-y-4">
+              <div className="border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Upload className="w-4 h-4 text-rcpit-600" /> Upload New Documents & Attachments
+                </h3>
+                <p className="text-[11px] text-slate-400">
+                  Drag and drop files from your computer or click to select multiple files
+                </p>
+              </div>
+
+              <DocumentDropzone
+                activityId={activity._id}
+                onUploadSuccess={fetchActivityData}
+              />
+            </div>
+          )}
+
+          {/* Section C: Uploaded Supporting Documents Management (Change 2) */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
                 Uploaded Attachments & Supporting Documents ({documents.filter(d => d.documentType !== 'GENERATED_ACTIVITY_REPORT').length})
               </h3>
-              {user?.role !== 'DIRECTOR' && (
-                <button
-                  onClick={() => setShowDocModal(true)}
-                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 rounded-2xl text-xs font-extrabold flex items-center gap-2"
-                >
-                  <Plus className="w-4 h-4" /> Upload Attachment
-                </button>
-              )}
             </div>
 
             {documents.filter(d => d.documentType !== 'GENERATED_ACTIVITY_REPORT').length === 0 ? (
               <div className="glass-card p-8 text-center text-xs text-slate-400">
-                No supporting documents uploaded yet.
+                No supporting documents uploaded yet. Use the upload area above to attach documents.
               </div>
             ) : (
               <div className="space-y-3">
-                {documents.filter(d => d.documentType !== 'GENERATED_ACTIVITY_REPORT').map((doc) => (
-                  <div key={doc._id} className="glass-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 rounded-2xl bg-rcpit-50 dark:bg-slate-800 text-rcpit-600">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-black text-slate-900 dark:text-white">{doc.documentType}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-rcpit-100 text-rcpit-800 text-[10px] font-bold">
-                            v{doc.version}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          Uploaded by <strong>{doc.uploadedBy?.name || 'Coordinator'}</strong> on {new Date(doc.createdAt).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
+                {documents.filter(d => d.documentType !== 'GENERATED_ACTIVITY_REPORT').map((doc) => {
+                  const isUploader = doc.uploadedBy?._id === user?._id;
+                  const canDelete = (isUploader || isHodOrAdmin) && !activity.isLocked && activity.status !== 'COMPLETED';
 
-                    <div className="flex items-center gap-3">
-                      <a
-                        href={getApiUrl(doc.fileUrl)} target="_blank" rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-200"
-                      >
-                        <Download className="w-3.5 h-3.5" /> Download
-                      </a>
+                  return (
+                    <div key={doc._id} className="glass-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 rounded-2xl bg-rcpit-50 dark:bg-slate-800 text-rcpit-600 shrink-0">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-black text-slate-900 dark:text-white">{doc.fileName}</span>
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-bold">
+                              {doc.documentType.replace(/_/g, ' ')}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-rcpit-100 text-rcpit-800 dark:bg-rcpit-950 dark:text-rcpit-300 text-[10px] font-bold">
+                              v{doc.version}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 mt-1">
+                            Uploaded by <strong>{doc.uploadedBy?.name || 'Coordinator'}</strong> on {new Date(doc.createdAt).toLocaleDateString()} {new Date(doc.createdAt).toLocaleTimeString()} • <strong>{formatFileSize(doc.fileSize)}</strong>
+                          </p>
+                          {doc.description && (
+                            <p className="text-[11px] text-slate-500 italic mt-0.5">
+                              "{doc.description}"
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <a
+                          href={getApiUrl(doc.fileUrl)} target="_blank" rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-xl font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 hover:bg-slate-200 transition-colors"
+                        >
+                          <Download className="w-3.5 h-3.5" /> Download
+                        </a>
+
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingDoc(doc)}
+                            className="px-3 py-1.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 rounded-xl font-bold flex items-center gap-1.5 hover:bg-rose-100 transition-colors"
+                            title="Delete this document"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1377,6 +1445,47 @@ export const ActivityDetail = () => {
         </div>
       )}
 
+      {/* Delete Document Confirmation Dialog (Change 2) */}
+      {deletingDoc && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-black text-base text-slate-900 dark:text-white">Delete Uploaded Document</h3>
+              </div>
+              <button onClick={() => setDeletingDoc(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+              Are you sure you want to delete the document <strong className="text-slate-900 dark:text-white">"{deletingDoc.fileName}"</strong> (Version {deletingDoc.version})?
+            </p>
+
+            <div className="p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-[11px] text-rose-700 dark:text-rose-300">
+              This action will remove the document record and unlink the stored attachment. This cannot be undone.
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDeletingDoc(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl text-slate-700 dark:text-slate-300"
+              >
+                Keep Document
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingDocLoading}
+                onClick={handleDeleteDocument}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold rounded-xl shadow-md transition-all flex items-center gap-1.5"
+              >
+                {isDeletingDocLoading ? 'Deleting...' : 'Yes, Delete Document'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cancellation Modal */}
       {showCancelModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1497,42 +1606,6 @@ export const ActivityDetail = () => {
         </div>
       )}
 
-      {/* Upload Document Modal */}
-      {showDocModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
-            <h3 className="font-extrabold text-base text-slate-900 dark:text-white">Upload Activity Document</h3>
-            <form onSubmit={handleDocUpload} className="space-y-3">
-              <div>
-                <label className="block font-bold mb-1">Document Type</label>
-                <select value={docType} onChange={(e) => setDocType(e.target.value)} className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border">
-                  <option value="PERMISSION_LETTER">Permission Letter</option>
-                  <option value="INVITATION">Invitation Card</option>
-                  <option value="ATTENDANCE">Attendance Sheet</option>
-                  <option value="CERTIFICATE">Certificates</option>
-                  <option value="EVENT_REPORT">Event Report Document</option>
-                  <option value="POSTER">Posters & Banners</option>
-                  <option value="SUPPORTING_DOCUMENT">Supporting Document</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </div>
-              <div>
-                <label className="block font-bold mb-1">Select File (PDF, DOCX, XLSX, PPTX)</label>
-                <input type="file" onChange={(e) => setDocFile(e.target.files[0])} className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border" />
-              </div>
-              <div>
-                <label className="block font-bold mb-1">Description / Notes</label>
-                <input type="text" placeholder="e.g. Revised event schedule v2" value={docDescription} onChange={(e) => setDocDescription(e.target.value)} className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border" />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowDocModal(false)} className="px-4 py-2 bg-slate-100 font-bold rounded-xl">Cancel</button>
-                <button type="submit" disabled={uploadingDoc} className="px-5 py-2 bg-rcpit-600 text-white font-bold rounded-xl shadow">Upload Document</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
       {/* Add Participant Modal */}
       {showAddParticipantModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1572,7 +1645,7 @@ export const ActivityDetail = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
             <h3 className="font-extrabold text-base text-slate-900 dark:text-white">Import Attendance via CSV</h3>
-            <p className="text-slate-500">Paste CSV data. Formats with or without Sr. No. are supported: <code>[Sr. No], Name, PRN/ID, Department, Type, Email, Status</code></p>
+            <p className="text-slate-500">Paste CSV data: <code>[Sr. No], Name, PRN/ID, Department, Type, Email, Status</code></p>
             <form onSubmit={handleImportCsv} className="space-y-3">
               <textarea rows="6" placeholder="Sr. No, Name, ID, Department, Type, Email, Status&#10;1, John Doe, 202601, Computer, STUDENT, john@rcpit.ac.in, PRESENT" value={csvText} onChange={(e) => setCsvText(e.target.value)} className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border font-mono text-[11px]" />
               <div className="flex justify-end gap-2">
@@ -1608,7 +1681,7 @@ export const ActivityDetail = () => {
         </div>
       )}
 
-      {/* Manage Budget Modal (Requirement 9) */}
+      {/* Manage Budget Modal */}
       {showBudgetModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4 text-xs">
@@ -1691,6 +1764,14 @@ export const ActivityDetail = () => {
           </div>
         </div>
       )}
+
+      {/* Resubmit Activity Modal (Change 3) */}
+      <ResubmitActivityModal
+        isOpen={showResubmitModal}
+        onClose={() => setShowResubmitModal(false)}
+        activity={activity}
+        onSuccess={fetchActivityData}
+      />
 
       <QRCodeModal isOpen={showQrModal} onClose={() => setShowQrModal(false)} activity={activity} />
       <PDFViewerModal isOpen={showPdfModal} onClose={() => setShowPdfModal(false)} activityId={activity._id} pdfType="activity" />

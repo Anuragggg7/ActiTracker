@@ -18,7 +18,10 @@ import {
   updateActivityBudget,
   updateActivityStatus,
   getActivityApprovals,
-  getPublicActivityDetail
+  getPublicActivityDetail,
+  getChangesRequestedActivities,
+  getRejectedActivities,
+  resubmitActivity
 } from '../controllers/activityController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 
@@ -29,10 +32,12 @@ router.get('/public/:id', getPublicActivityDetail);
 
 router.use(protect);
 
-// Queue & List Endpoints (Defined before parameterized :id routes)
+// Queue & Dedicated Filter Endpoints (Defined before parameterized :id routes)
 router.get('/pending-hod', authorize('HOD', 'ADMIN'), getPendingHodActivities);
 router.get('/forwarded-hod', authorize('HOD', 'ADMIN'), getForwardedHodActivities);
 router.get('/pending-admin', authorize('ADMIN', 'DIRECTOR'), getPendingAdminActivities);
+router.get('/changes-requested', getChangesRequestedActivities);
+router.get('/rejected', getRejectedActivities);
 router.get('/cancellations', getCancellationHistory);
 
 // General Activity CRUD & Queries
@@ -43,6 +48,9 @@ router.get('/:id/cancellations', getCancellationHistory);
 router.post('/', createActivity);
 router.put('/:id', updateActivity);
 router.put('/:id/budget', updateActivityBudget);
+
+// Activity Correction Resubmission (Change 3)
+router.post('/:id/resubmit', resubmitActivity);
 
 // Activity Cancellation (Enhancement C)
 router.post('/:id/cancel', cancelActivity);
