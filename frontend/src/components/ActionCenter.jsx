@@ -24,6 +24,32 @@ export const ActionCenter = () => {
     fetchActionItems();
   }, []);
 
+  const handleResolve = (e, item) => {
+    const actId = item.activityId || item.id;
+    if (!actId) return;
+
+    // Look for target element by activity id in DOM
+    const targetEl = document.getElementById(`activity-${actId}`) || document.getElementById(actId);
+
+    if (targetEl) {
+      e.preventDefault();
+      try {
+        window.history.replaceState(null, '', `#activity-${actId}`);
+      } catch (err) {
+        // ignore
+      }
+
+      // Smooth scroll to the target activity element
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+      // Add high-visibility focus highlight
+      targetEl.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
+      setTimeout(() => {
+        targetEl.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
+      }, 3000);
+    }
+  };
+
   if (loading) {
     return (
       <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 animate-pulse">
@@ -70,6 +96,7 @@ export const ActionCenter = () => {
             <Link
               key={item.id}
               to={item.link}
+              onClick={(e) => handleResolve(e, item)}
               className="flex items-center justify-between p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-amber-400 dark:hover:border-amber-500 shadow-2xs hover:shadow-md transition-all group"
             >
               <div className="flex items-center gap-3">

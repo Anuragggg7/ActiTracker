@@ -142,6 +142,23 @@ export const AdminDashboard = () => {
     fetchAdminData();
   }, []);
 
+  // Smooth scroll to target activity if opened with hash (e.g., from Action Center)
+  useEffect(() => {
+    if (!loading && window.location.hash) {
+      const targetId = window.location.hash.replace('#', '');
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
+          setTimeout(() => {
+            el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
+          }, 3000);
+        }, 200);
+      }
+    }
+  }, [loading]);
+
   const openDecisionModal = (act, type) => {
     setSelectedActivity(act);
     setDecisionModal(type);
@@ -501,7 +518,8 @@ export const AdminDashboard = () => {
                 {filteredApprovalActivities.map((act) => (
                   <div
                     key={act._id}
-                    className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4 transition-all hover:border-rcpit-300 dark:hover:border-slate-600"
+                    id={`activity-${act._id}`}
+                    className="scroll-mt-24 p-5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-4 transition-all hover:border-rcpit-300 dark:hover:border-slate-600"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
                       <div>

@@ -88,6 +88,23 @@ export const FacultyDashboard = () => {
     fetchFacultyData();
   }, []);
 
+  // Smooth scroll to target activity if opened with hash (e.g., from Action Center)
+  useEffect(() => {
+    if (!loading && window.location.hash) {
+      const targetId = window.location.hash.replace('#', '');
+      const el = document.getElementById(targetId);
+      if (el) {
+        setTimeout(() => {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('ring-4', 'ring-amber-500', 'ring-offset-2', 'transition-all', 'duration-500');
+          setTimeout(() => {
+            el.classList.remove('ring-4', 'ring-amber-500', 'ring-offset-2');
+          }, 3000);
+        }, 200);
+      }
+    }
+  }, [loading]);
+
   // Handle Activity or Session Cancellation
   const handleConfirmCancellation = async () => {
     if (!cancellingActivity) return;
@@ -258,7 +275,8 @@ export const FacultyDashboard = () => {
               return (
                 <div
                   key={act._id}
-                  className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+                  id={`activity-${act._id}`}
+                  className="scroll-mt-24 p-5 rounded-2xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 shadow-md flex flex-col lg:flex-row lg:items-center justify-between gap-4"
                 >
                   <div className="space-y-2 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -403,7 +421,7 @@ export const FacultyDashboard = () => {
                     !['COMPLETED', 'ARCHIVED', 'CANCELLED'].includes(act.status);
 
                   return (
-                    <tr key={act._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                    <tr key={act._id} id={`activity-${act._id}`} className="scroll-mt-24 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                       <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
                         <Link
                           to={`/faculty/activities/${act._id}`}
@@ -547,7 +565,7 @@ export const FacultyDashboard = () => {
                   const rejectDate = act.rejectedAt ? new Date(act.rejectedAt).toLocaleDateString() : new Date(act.updatedAt).toLocaleDateString();
 
                   return (
-                    <tr key={act._id} className="hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-colors">
+                    <tr key={act._id} id={`activity-${act._id}`} className="scroll-mt-24 hover:bg-rose-50/30 dark:hover:bg-rose-950/20 transition-colors">
                       <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
                         <Link
                           to={`/faculty/activities/${act._id}`}

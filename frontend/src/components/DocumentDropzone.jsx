@@ -304,3 +304,4 @@ export const DocumentDropzone = ({ activityId, onUploadSuccess }) => {
 };
 
 export default DocumentDropzone;
+

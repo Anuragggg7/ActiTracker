@@ -94,10 +94,11 @@ export const getActionCenterItems = async (req, res) => {
       pendingReports.forEach(act => {
         items.push({
           id: act._id,
+          activityId: act._id,
           title: `Post-Event Report Pending: "${act.title}"`,
           type: 'REPORT_PENDING',
           priority: 'HIGH',
-          link: `/activities/${act._id}`
+          link: `/faculty/activities/${act._id}`
         });
       });
 
@@ -108,10 +109,11 @@ export const getActionCenterItems = async (req, res) => {
       changesRequested.forEach(act => {
         items.push({
           id: act._id,
-          title: `Changes Requested by HOD: "${act.title}"`,
+          activityId: act._id,
+          title: `Changes Requested by Reviewing Authority: "${act.title}"`,
           type: 'CHANGES_REQUIRED',
           priority: 'MEDIUM',
-          link: `/activities/${act._id}`
+          link: `/faculty#activity-${act._id}`
         });
       });
     } else if (role === 'HOD') {
@@ -124,21 +126,25 @@ export const getActionCenterItems = async (req, res) => {
       pendingEvents.forEach(act => {
         items.push({
           id: act._id,
+          activityId: act._id,
           title: `Activity Review Required: "${act.title}"`,
           type: 'EVENT_APPROVAL',
           priority: 'HIGH',
-          link: `/hod`
+          link: `/hod#activity-${act._id}`
         });
       });
     } else if (role === 'ADMIN') {
-      const pendingApprovals = await Activity.countDocuments({ status: 'ADMIN_REVIEW' });
-      if (pendingApprovals > 0) {
-        items.push({
-          id: 'activities-pending-admin',
-          title: `${pendingApprovals} Activity Proposal(s) Forwarded by HOD Awaiting Final Approval`,
-          type: 'ACTIVITY_APPROVAL',
-          priority: 'HIGH',
-          link: '/admin'
+      const pendingApprovals = await Activity.find({ status: 'ADMIN_REVIEW' });
+      if (pendingApprovals.length > 0) {
+        pendingApprovals.forEach(act => {
+          items.push({
+            id: act._id,
+            activityId: act._id,
+            title: `Admin Approval Required: "${act.title}"`,
+            type: 'ACTIVITY_APPROVAL',
+            priority: 'HIGH',
+            link: `/admin#activity-${act._id}`
+          });
         });
       }
 

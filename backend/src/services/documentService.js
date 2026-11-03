@@ -223,3 +223,4 @@ export const verifyDocumentService = async ({ docId, status, user, req }) => {
 
   return doc;
 };
+
