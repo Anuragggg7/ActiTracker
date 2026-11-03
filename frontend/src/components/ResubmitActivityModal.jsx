@@ -48,7 +48,7 @@ export const ResubmitActivityModal = ({ isOpen, onClose, activity, onSuccess }) 
     const fetchVenues = async () => {
       try {
         setLoadingVenues(true);
-        const res = await api.get('/venues');
+        const res = await api.get('/slots/venues');
         if (res.success) {
           setVenues(res.venues || []);
         }
@@ -289,3 +289,4 @@ export const ResubmitActivityModal = ({ isOpen, onClose, activity, onSuccess }) 
 };
 
 export default ResubmitActivityModal;
+

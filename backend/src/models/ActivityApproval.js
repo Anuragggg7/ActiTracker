@@ -7,6 +7,7 @@ const activityApprovalSchema = new mongoose.Schema(
       type: String,
       enum: [
         'SUBMITTED',
+        'RESUBMITTED',
         'HOD_REVIEW',
         'FORWARDED_TO_ADMIN',
         'ADMIN_REVIEW',
