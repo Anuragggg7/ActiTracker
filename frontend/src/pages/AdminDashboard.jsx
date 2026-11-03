@@ -9,12 +9,12 @@ import CreateActivityModal from '../components/CreateActivityModal';
 import {
   Users, Building, Clock, ShieldAlert, Plus, AlertTriangle, CheckCircle, XCircle,
   Search, RefreshCw, Eye, EyeOff, CheckSquare, Send, RotateCcw, Calendar, MapPin,
-  DollarSign, MessageSquare, Filter, ShieldCheck, X
+  DollarSign, MessageSquare, Filter, ShieldCheck, X, Flame, Zap, Award, CheckCircle2
 } from 'lucide-react';
 
 export const AdminDashboard = () => {
   const { showToast } = useNotifications();
-  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals', 'slots', 'users', 'departments', 'audit'
+  const [activeTab, setActiveTab] = useState('approvals'); // 'approvals', 'slots', 'reallocation', 'users', 'departments', 'audit'
 
   const [pendingApprovals, setPendingApprovals] = useState([]);
   const [allApprovalsHistory, setAllApprovalsHistory] = useState([]);
@@ -22,6 +22,9 @@ export const AdminDashboard = () => {
   const [usersList, setUsersList] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
+  const [waitingQueueEntries, setWaitingQueueEntries] = useState([]);
+  const [slotOffersList, setSlotOffersList] = useState([]);
+  const [cancellationRecords, setCancellationRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
@@ -29,6 +32,7 @@ export const AdminDashboard = () => {
   const [approvalSearch, setApprovalSearch] = useState('');
   const [approvalDeptFilter, setApprovalDeptFilter] = useState('');
   const [approvalCategoryFilter, setApprovalCategoryFilter] = useState('');
+  const [approvalPriorityFilter, setApprovalPriorityFilter] = useState('ALL'); // 'ALL', 'HIGH', 'MEDIUM', 'NORMAL'
   const [approvalStatusFilter, setApprovalStatusFilter] = useState('ADMIN_REVIEW');
 
   // Decision Modal State
@@ -47,7 +51,17 @@ export const AdminDashboard = () => {
   const fetchAdminData = async () => {
     try {
       setLoading(true);
-      const [pendingActRes, allActRes, slotRes, userRes, deptsList, auditRes] = await Promise.all([
+      const [
+        pendingActRes,
+        allActRes,
+        slotRes,
+        userRes,
+        deptsList,
+        auditRes,
+        queueRes,
+        offersRes,
+        cancelsRes
+      ] = await Promise.all([
         api.get('/activities/pending-admin').catch((err) => {
           console.warn('Pending admin activities fetch error:', err.message);
           return { success: false };
@@ -68,7 +82,10 @@ export const AdminDashboard = () => {
         api.get('/audit-logs').catch((err) => {
           console.warn('Audit logs fetch error:', err.message);
           return { success: false };
-        })
+        }),
+        api.get('/slots/waiting-queue').catch(() => ({ success: false })),
+        api.get('/slots/offers').catch(() => ({ success: false })),
+        api.get('/slots/cancellations').catch(() => ({ success: false }))
       ]);
 
       if (pendingActRes && pendingActRes.success) {
@@ -102,6 +119,18 @@ export const AdminDashboard = () => {
         const logs = Array.isArray(auditRes) ? auditRes : (auditRes.logs || auditRes.auditLogs || auditRes.data || []);
         setAuditLogs(logs);
       }
+
+      if (queueRes && queueRes.success) {
+        setWaitingQueueEntries(queueRes.waitingQueue || []);
+      }
+
+      if (offersRes && offersRes.success) {
+        setSlotOffersList(offersRes.offers || []);
+      }
+
+      if (cancelsRes && cancelsRes.success) {
+        setCancellationRecords(cancelsRes.history || []);
+      }
     } catch (err) {
       console.error('Error fetching admin data:', err);
     } finally {
@@ -123,7 +152,7 @@ export const AdminDashboard = () => {
     if (!selectedActivity || !decisionModal) return;
 
     if (decisionModal === 'REJECT' && !decisionNotes.trim()) {
-      showToast('A mandatory rejection reason is required', 'warning');
+      showToast('A mandatory rejection reason is strictly required to reject an activity', 'warning');
       return;
     }
     if (decisionModal === 'REQUEST_CHANGES' && !decisionNotes.trim()) {
@@ -193,19 +222,7 @@ export const AdminDashboard = () => {
     }
   };
 
-  const handleToggleUserStatus = async (userId) => {
-    try {
-      const res = await api.put(`/users/${userId}/toggle-status`);
-      if (res.success) {
-        showToast(res.message, 'success');
-        fetchAdminData();
-      }
-    } catch (err) {
-      showToast(err.message || 'Failed to change status', 'error');
-    }
-  };
-
-  // Filtered Activities for Approval Center
+  // Filtered Activities for Approval Center (Enhancement E: Priority filter support)
   const filteredApprovalActivities = allApprovalsHistory.filter(act => {
     if (approvalStatusFilter !== 'ALL' && act.status !== approvalStatusFilter) {
       return false;
@@ -217,6 +234,9 @@ export const AdminDashboard = () => {
     if (approvalCategoryFilter && act.category !== approvalCategoryFilter) {
       return false;
     }
+    if (approvalPriorityFilter !== 'ALL' && (act.hodPriority || 'NORMAL') !== approvalPriorityFilter) {
+      return false;
+    }
     if (approvalSearch.trim()) {
       const q = approvalSearch.toLowerCase();
       const matchTitle = act.title?.toLowerCase().includes(q);
@@ -225,6 +245,28 @@ export const AdminDashboard = () => {
     }
     return true;
   });
+
+  const renderPriorityBadge = (p) => {
+    if (p === 'HIGH') {
+      return (
+        <span className="px-2.5 py-1 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-extrabold text-[10px] inline-flex items-center gap-1 border border-rose-300 dark:border-rose-800">
+          <Flame className="w-3 h-3 text-rose-600" /> HIGH PRIORITY
+        </span>
+      );
+    }
+    if (p === 'MEDIUM') {
+      return (
+        <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1 border border-amber-300 dark:border-amber-800">
+          <Zap className="w-3 h-3 text-amber-600" /> MEDIUM PRIORITY
+        </span>
+      );
+    }
+    return (
+      <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold text-[10px] inline-flex items-center gap-1 border border-slate-200 dark:border-slate-700">
+        NORMAL PRIORITY
+      </span>
+    );
+  };
 
   return (
     <div className="space-y-8 animate-fade-in pb-12">
@@ -239,7 +281,7 @@ export const AdminDashboard = () => {
             Central Administrative Operations Panel
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Institutional Final Approval Authority • Venue FCFS Scheduler • User Directory
+            Institutional Final Approval Authority • Smart Slot Reallocation • User Directory
           </p>
         </div>
 
@@ -280,6 +322,17 @@ export const AdminDashboard = () => {
         </button>
 
         <button
+          onClick={() => setActiveTab('reallocation')}
+          className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+            activeTab === 'reallocation'
+              ? 'bg-rcpit-600 text-white shadow-md'
+              : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+          }`}
+        >
+          <RefreshCw className="w-4 h-4 text-emerald-400" /> Smart Slot Reallocation & Waiting Queue ({waitingQueueEntries.filter(w => w.status === 'WAITING').length})
+        </button>
+
+        <button
           onClick={() => setActiveTab('slots')}
           className={`px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
             activeTab === 'slots'
@@ -287,7 +340,7 @@ export const AdminDashboard = () => {
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
           }`}
         >
-          <Clock className="w-4 h-4" /> Slot & Venue Requests ({slotRequests.filter(s => s.status === 'PENDING' || s.status === 'CONFLICT_DETECTED').length})
+          <Clock className="w-4 h-4" /> Slot Requests ({slotRequests.filter(s => s.status === 'PENDING' || s.status === 'CONFLICT_DETECTED').length})
         </button>
 
         <button
@@ -324,7 +377,7 @@ export const AdminDashboard = () => {
         </button>
       </div>
 
-      {/* TAB 0: Activity Approval Center (New Workflow: Admin Final Approval) */}
+      {/* TAB 0: Activity Approval Center (Enhancements E & F) */}
       {activeTab === 'approvals' && (
         <div className="space-y-6">
           <div className="glass-card p-6 space-y-5">
@@ -383,17 +436,30 @@ export const AdminDashboard = () => {
               </div>
             </div>
 
-            {/* Filter & Search Bar */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            {/* Filter & Search Bar with Priority Filter (Enhancement E) */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   value={approvalSearch}
                   onChange={(e) => setApprovalSearch(e.target.value)}
-                  placeholder="Search by activity title or faculty..."
+                  placeholder="Search by title or coordinator..."
                   className="w-full pl-9 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none"
                 />
+              </div>
+
+              <div>
+                <select
+                  value={approvalPriorityFilter}
+                  onChange={(e) => setApprovalPriorityFilter(e.target.value)}
+                  className="w-full p-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none font-bold"
+                >
+                  <option value="ALL">All Priorities</option>
+                  <option value="HIGH">🔥 High Priority Only</option>
+                  <option value="MEDIUM">⚡ Medium Priority Only</option>
+                  <option value="NORMAL">Normal Priority Only</option>
+                </select>
               </div>
 
               <div>
@@ -447,6 +513,12 @@ export const AdminDashboard = () => {
                           <span className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-200/70 dark:bg-slate-700 px-2 py-0.5 rounded-md">
                             {act.departmentId?.name || 'Department'} ({act.departmentId?.code || ''})
                           </span>
+                          {renderPriorityBadge(act.hodPriority)}
+                          {act.isAllDay && (
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-black uppercase">
+                              All-Day Event
+                            </span>
+                          )}
                         </div>
                         <h4 className="text-base font-extrabold text-slate-900 dark:text-white mt-1">
                           <Link
@@ -475,24 +547,47 @@ export const AdminDashboard = () => {
                       {act.description}
                     </p>
 
-                    {/* HOD Review Notes Callout */}
-                    {act.hodReviewNotes && (
-                      <div className="p-3 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 text-xs text-cyan-900 dark:text-cyan-200 flex items-start gap-2">
-                        <MessageSquare className="w-4 h-4 text-cyan-600 shrink-0 mt-0.5" />
-                        <div>
-                          <strong className="block text-[11px] font-black uppercase text-cyan-800 dark:text-cyan-300">
-                            HOD Endorsement & Review Notes:
-                          </strong>
-                          <span>{act.hodReviewNotes}</span>
+                    {/* HOD Review Notes & Priority Reason Callout */}
+                    {(act.hodPriorityReason || act.hodReviewNotes) && (
+                      <div className="p-3.5 rounded-xl bg-cyan-50/70 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 text-xs text-cyan-900 dark:text-cyan-200 space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-cyan-800 dark:text-cyan-300 uppercase text-[10px]">
+                          <MessageSquare className="w-3.5 h-3.5 text-cyan-600" />
+                          HOD Recommendation Details:
+                        </div>
+                        {act.hodPriorityReason && (
+                          <p><strong>Priority Reason ({act.hodPriority || 'NORMAL'}):</strong> {act.hodPriorityReason}</p>
+                        )}
+                        {act.hodReviewNotes && act.hodReviewNotes !== act.hodPriorityReason && (
+                          <p><strong>Review Notes:</strong> {act.hodReviewNotes}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Multi-Session Breakdown if applicable */}
+                    {Array.isArray(act.sessions) && act.sessions.length > 1 && (
+                      <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
+                        <span className="font-extrabold text-rcpit-600 dark:text-rcpit-400 text-[11px] flex items-center gap-1">
+                          <Layers className="w-3.5 h-3.5" /> Multiple Scheduled Sessions ({act.sessions.length} Occurrences):
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {act.sessions.map((s, idx) => (
+                            <div key={idx} className="p-2 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-[11px]">
+                              <span className="font-bold">{s.sessionTitle || `Session ${idx + 1}`}: </span>
+                              <span>{new Date(s.date).toLocaleDateString()} ({s.isAllDay ? 'All-Day' : `${s.startTime}-${s.endTime}`})</span>
+                              <div className="text-slate-500 mt-0.5">
+                                Venue: {s.venueName || 'TBD'} • Exp: {s.expectedParticipants}
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Metadata Badges */}
+                    {/* Metadata Badges with Venue Capacity */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <Calendar className="w-3.5 h-3.5 text-rcpit-600 shrink-0" />
-                        <span>{new Date(act.date).toLocaleDateString()} ({act.startTime} - {act.endTime})</span>
+                        <span>{new Date(act.date).toLocaleDateString()} ({act.isAllDay ? 'All-Day' : `${act.startTime} - ${act.endTime}`})</span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
@@ -500,7 +595,10 @@ export const AdminDashboard = () => {
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                        <span>{act.expectedParticipants} Expected Attendees</span>
+                        <span>
+                          Expected: {act.expectedParticipants} Attendees
+                          {act.venueId?.capacity ? ` (Cap: ${act.venueId.capacity})` : ''}
+                        </span>
                       </div>
                       <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                         <DollarSign className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -508,8 +606,18 @@ export const AdminDashboard = () => {
                       </div>
                     </div>
 
+                    {/* Rejection reason display if rejected */}
+                    {act.rejectionReason && act.status === 'REJECTED' && (
+                      <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200">
+                        <strong className="block text-[11px] font-black uppercase text-rose-700 dark:text-rose-300">
+                          Official Institutional Rejection Reason:
+                        </strong>
+                        <span>{act.rejectionReason}</span>
+                      </div>
+                    )}
+
                     {/* Decision Details if already decided */}
-                    {act.adminReviewNotes && act.status !== 'ADMIN_REVIEW' && (
+                    {act.adminReviewNotes && act.status !== 'ADMIN_REVIEW' && act.status !== 'REJECTED' && (
                       <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 space-y-1">
                         <span className="font-bold uppercase text-[10px] text-slate-500 block">Admin Decision Record:</span>
                         <p>{act.adminReviewNotes}</p>
@@ -561,7 +669,160 @@ export const AdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 1: Slot Requests & Conflict Resolution Engine */}
+      {/* TAB 1: Smart Slot Reallocation & Waiting Queue (Enhancement C) */}
+      {activeTab === 'reallocation' && (
+        <div className="space-y-6">
+          {/* Active FCFS Waiting Queue */}
+          <div className="glass-card p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <RefreshCw className="w-5 h-5 text-rcpit-600" /> FCFS Waiting Queue Allocation Engine
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Ordered strictly by original server-generated request timestamp. Reallocates automatically when a confirmed booking is cancelled.
+                </p>
+              </div>
+              <span className="text-xs font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 px-3 py-1 rounded-full">
+                {waitingQueueEntries.filter(w => w.status === 'WAITING').length} Active In Queue
+              </span>
+            </div>
+
+            {waitingQueueEntries.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No active waiting queue entries currently registered.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-500 text-[10px] uppercase border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="p-3">FCFS Order</th>
+                      <th className="p-3">Activity</th>
+                      <th className="p-3">Requested Venue</th>
+                      <th className="p-3">Target Date & Time</th>
+                      <th className="p-3">Requester</th>
+                      <th className="p-3">Priority</th>
+                      <th className="p-3">Queue Status</th>
+                      <th className="p-3">Queue Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {waitingQueueEntries.map((entry, idx) => (
+                      <tr key={entry._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="p-3 font-mono font-black text-rcpit-600">
+                          #{idx + 1}
+                        </td>
+                        <td className="p-3 font-bold text-slate-900 dark:text-white max-w-xs truncate">
+                          {entry.activityId?.title || 'Activity'}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300">
+                          {entry.venueId?.name || 'Venue'}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          {new Date(entry.date).toLocaleDateString()} ({entry.isAllDay ? 'All-Day' : `${entry.startTime} - ${entry.endTime}`})
+                        </td>
+                        <td className="p-3 text-slate-500">
+                          {entry.requestedBy?.name || 'Faculty'}
+                        </td>
+                        <td className="p-3 whitespace-nowrap">
+                          {renderPriorityBadge(entry.priority)}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                            entry.status === 'WAITING' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                            entry.status === 'OFFERED' ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300 animate-pulse' :
+                            entry.status === 'ACCEPTED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                            {entry.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {new Date(entry.queueTimestamp).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Cancellation & Reallocation Audit History */}
+          <div className="glass-card p-6 space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-rose-600" /> Booking Cancellation & Slot Reallocation History
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Immutable institutional audit log of cancelled bookings, released venue slots, and smart reallocation outcomes
+                </p>
+              </div>
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
+                {cancellationRecords.length} Cancellations Logged
+              </span>
+            </div>
+
+            {cancellationRecords.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-400">
+                No cancellations recorded yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-500 text-[10px] uppercase border-b border-slate-200 dark:border-slate-800">
+                    <tr>
+                      <th className="p-3">Cancelled Activity</th>
+                      <th className="p-3">Released Venue & Slot</th>
+                      <th className="p-3">Cancelled By</th>
+                      <th className="p-3">Cancellation Reason</th>
+                      <th className="p-3">Reallocation Outcome</th>
+                      <th className="p-3">Cancellation Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {cancellationRecords.map((c) => (
+                      <tr key={c._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="p-3 font-bold text-slate-900 dark:text-white max-w-xs truncate">
+                          {c.activityTitle || c.activityId?.title || 'Activity'}
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                          <div>{c.venueName || c.venueId?.name || 'Venue'}</div>
+                          <div className="text-[10px] text-slate-400">
+                            {new Date(c.date).toLocaleDateString()} ({c.startTime} - {c.endTime})
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-500">
+                          {c.cancellerName || c.cancelledBy?.name || 'User'} ({c.cancellerRole || c.cancelledBy?.role})
+                        </td>
+                        <td className="p-3 text-slate-600 dark:text-slate-300 max-w-xs truncate" title={c.cancellationReason}>
+                          {c.cancellationReason}
+                        </td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                            c.reallocationStatus === 'REALLOCATED' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' :
+                            c.reallocationStatus === 'OFFERED' ? 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' :
+                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                          }`}>
+                            {c.reallocationStatus}
+                          </span>
+                        </td>
+                        <td className="p-3 text-slate-400 font-mono text-[11px] whitespace-nowrap">
+                          {new Date(c.cancelledAt || c.createdAt).toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: Slot Requests & Conflict Resolution Engine */}
       {activeTab === 'slots' && (
         <div className="glass-card p-6 space-y-4">
           <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
@@ -652,7 +913,7 @@ export const AdminDashboard = () => {
                         </button>
                         <button
                           onClick={() => handleReviewSlot(req._id, 'APPROVE')}
-                          className="px-4 py-1.5 bg-emerald-600 text-white font-bold rounded-xl shadow-sm"
+                          className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold rounded-xl shadow-md"
                         >
                           Approve Slot
                         </button>
@@ -666,56 +927,53 @@ export const AdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 2: Users */}
+      {/* TAB 3: Users */}
       {activeTab === 'users' && (
         <div className="glass-card p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-rcpit-600" /> Institutional User Management
+              <Users className="w-5 h-5 text-rcpit-600" /> Authorized Institutional Accounts ({usersList.length})
             </h3>
             <button
               onClick={() => setShowUserModal(true)}
-              className="px-4 py-2 bg-rcpit-600 text-white font-bold text-xs rounded-xl"
+              className="px-4 py-2 bg-rcpit-600 hover:bg-rcpit-500 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-1.5"
             >
-              + Create User
+              <Plus className="w-4 h-4" /> Add User
             </button>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 dark:bg-slate-800 font-bold text-slate-600 dark:text-slate-400">
+              <thead className="bg-slate-50 dark:bg-slate-800/60 font-bold text-slate-500 text-[10px] uppercase border-b border-slate-200 dark:border-slate-800">
                 <tr>
-                  <th className="p-3">Employee ID</th>
-                  <th className="p-3">Name</th>
-                  <th className="p-3">Email</th>
+                  <th className="p-3">User Name</th>
+                  <th className="p-3">Official Email</th>
                   <th className="p-3">Role</th>
                   <th className="p-3">Department</th>
+                  <th className="p-3">Employee ID</th>
                   <th className="p-3">Status</th>
-                  <th className="p-3">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {usersList.map((u) => (
-                  <tr key={u._id}>
-                    <td className="p-3 font-mono font-bold">{u.facultyEmployeeId || u.employeeId || '—'}</td>
-                    <td className="p-3 font-bold">{u.name}</td>
-                    <td className="p-3">{u.email}</td>
-                    <td className="p-3 font-semibold">{u.role}</td>
-                    <td className="p-3">{u.departmentId?.name || 'All'}</td>
+                  <tr key={u._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                    <td className="p-3 font-bold text-slate-900 dark:text-white">{u.name}</td>
+                    <td className="p-3 text-slate-500">{u.email}</td>
                     <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        u.status === 'ACTIVE' || u.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                      }`}>
-                        {u.status}
+                      <span className="px-2 py-0.5 rounded-md font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                        {u.role}
                       </span>
                     </td>
+                    <td className="p-3 text-slate-500">{u.departmentId?.name || u.department?.name || 'Administration'}</td>
+                    <td className="p-3 font-mono text-slate-500">{u.facultyEmployeeId || u.employeeId || '—'}</td>
                     <td className="p-3">
-                      <button
-                        onClick={() => handleToggleUserStatus(u._id)}
-                        className="text-xs text-rcpit-600 dark:text-rcpit-400 font-bold hover:underline"
-                      >
-                        {u.status === 'ACTIVE' || u.status === 'APPROVED' ? 'Deactivate' : 'Activate'}
-                      </button>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        u.status === 'APPROVED' || u.status === 'ACTIVE'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}>
+                        {u.status || 'ACTIVE'}
+                      </span>
                     </td>
                   </tr>
                 ))}
@@ -725,28 +983,28 @@ export const AdminDashboard = () => {
         </div>
       )}
 
-      {/* TAB 3: Departments */}
+      {/* TAB 4: Departments */}
       {activeTab === 'departments' && (
         <div className="glass-card p-6 space-y-4">
           <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
-            <Building className="w-5 h-5 text-rcpit-600" /> Academic & Administrative Departments
+            <Building className="w-5 h-5 text-rcpit-600" /> Academic Departments & Units ({departments.length})
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {departments.map((d) => (
-              <div key={d._id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 space-y-2">
-                <span className="text-[10px] font-bold text-rcpit-600">{d.code}</span>
+              <div key={d._id} className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                <span className="px-2 py-0.5 rounded bg-rcpit-50 dark:bg-rcpit-950 text-rcpit-600 dark:text-rcpit-400 font-mono font-black text-xs">
+                  {d.code}
+                </span>
                 <h4 className="font-extrabold text-sm text-slate-900 dark:text-white">{d.name}</h4>
-                <p className="text-xs text-slate-500">
-                  Head of Department: <strong className="text-slate-700 dark:text-slate-300">{d.hodId?.name || 'Unassigned'}</strong>
-                </p>
+                <p className="text-xs text-slate-500">HOD: {d.hodId?.name || 'Assigned HOD'}</p>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* TAB 4: Audit Logs */}
+      {/* TAB 5: Audit Log */}
       {activeTab === 'audit' && (
         <div className="glass-card p-6 space-y-4">
           <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
@@ -780,7 +1038,7 @@ export const AdminDashboard = () => {
         </div>
       )}
 
-      {/* Admin Decision Modal: Approve, Request Changes, Reject */}
+      {/* Admin Decision Modal: Approve, Request Changes, Reject (Enhancement F) */}
       {decisionModal && selectedActivity && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
@@ -802,6 +1060,15 @@ export const AdminDashboard = () => {
               <p className="font-bold text-slate-800 dark:text-slate-200">
                 Activity: <span className="text-rcpit-600">{selectedActivity.title}</span>
               </p>
+              <div className="flex items-center gap-2">
+                <span className="text-slate-500">HOD Recommended Priority:</span>
+                {renderPriorityBadge(selectedActivity.hodPriority)}
+              </div>
+              {selectedActivity.hodPriorityReason && (
+                <p className="text-amber-800 dark:text-amber-300 text-[11px]">
+                  <strong>HOD Reason:</strong> "{selectedActivity.hodPriorityReason}"
+                </p>
+              )}
               <p className="text-slate-500">
                 Department: {selectedActivity.departmentId?.name || 'Department'}
               </p>
@@ -810,7 +1077,7 @@ export const AdminDashboard = () => {
               </p>
               {selectedActivity.hodReviewNotes && (
                 <p className="text-cyan-700 dark:text-cyan-400 text-[11px] pt-1 border-t border-slate-200 dark:border-slate-700">
-                  HOD Endorsement: "{selectedActivity.hodReviewNotes}"
+                  HOD Review Notes: "{selectedActivity.hodReviewNotes}"
                 </p>
               )}
             </div>
@@ -825,6 +1092,7 @@ export const AdminDashboard = () => {
               </label>
               <textarea
                 rows={3}
+                required={decisionModal === 'REJECT' || decisionModal === 'REQUEST_CHANGES'}
                 value={decisionNotes}
                 onChange={(e) => setDecisionNotes(e.target.value)}
                 placeholder={
@@ -832,7 +1100,7 @@ export const AdminDashboard = () => {
                     ? 'e.g. Approved by System Administrator. Proceed to venue and execution scheduling.'
                     : decisionModal === 'REQUEST_CHANGES'
                     ? 'e.g. Please revise the proposed time slot or expand the target audience details.'
-                    : 'e.g. Does not meet institutional criteria or conflicts with schedule.'
+                    : 'e.g. Proposal does not satisfy institutional syllabus criteria or budgetary limits.'
                 }
                 className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-rcpit-500 outline-none"
               />

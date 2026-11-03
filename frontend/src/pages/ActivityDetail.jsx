@@ -10,7 +10,7 @@ import PDFViewerModal from '../components/PDFViewerModal';
 import {
   ArrowLeft, Calendar, MapPin, Clock, Users, DollarSign, FileText,
   Camera, Video, Upload, Download, QrCode, CheckCircle, AlertTriangle, Lock,
-  ShieldCheck, Award, MessageSquare, History, Plus, RefreshCw, Star, Trash2, Check, X, FileSpreadsheet, Eye, Play
+  ShieldCheck, Award, MessageSquare, History, Plus, RefreshCw, Star, Trash2, Check, X, FileSpreadsheet, Eye, Play, XCircle, AlertCircle
 } from 'lucide-react';
 
 export const ActivityDetail = () => {
@@ -29,6 +29,12 @@ export const ActivityDetail = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [showQrModal, setShowQrModal] = useState(false);
   const [showPdfModal, setShowPdfModal] = useState(false);
+
+  // Cancellation Modal State
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelSessionId, setCancelSessionId] = useState('');
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   // Lightbox Media Viewer State
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(null);
@@ -163,6 +169,33 @@ export const ActivityDetail = () => {
   useEffect(() => {
     fetchActivityData();
   }, [id]);
+
+  // Activity / Session Cancellation Handler
+  const handleCancelBooking = async (e) => {
+    e.preventDefault();
+    if (!cancellationReason.trim()) {
+      showToast('Mandatory cancellation reason required', 'warning');
+      return;
+    }
+    try {
+      setCancelling(true);
+      const payload = { cancellationReason: cancellationReason.trim() };
+      if (cancelSessionId) payload.sessionId = cancelSessionId;
+
+      const res = await api.post(`/activities/${id}/cancel`, payload);
+      if (res.success) {
+        showToast(res.message || 'Booking cancelled and slot released successfully', 'success');
+        setShowCancelModal(false);
+        setCancellationReason('');
+        setCancelSessionId('');
+        fetchActivityData();
+      }
+    } catch (err) {
+      showToast(err.message || 'Cancellation failed', 'error');
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   // Upload Media Handler (Images or Video)
   const handleMediaUpload = async (e) => {
@@ -384,14 +417,18 @@ export const ActivityDetail = () => {
     );
   }
 
-  const isHodOrAdmin = ['HOD', 'ADMIN'].includes(user?.role);
+  const isHodOrAdmin = ['HOD', 'ADMIN', 'DIRECTOR'].includes(user?.role);
   const isCoordinator = user?._id === (activity.coordinatorId?._id || activity.coordinatorId);
+  const canCancel = !['CANCELLED', 'COMPLETED', 'ARCHIVED'].includes(activity.status) && (isCoordinator || isHodOrAdmin);
+
+  // Word count calculation
+  const descWordCount = activity.description ? activity.description.trim().split(/\s+/).filter(Boolean).length : 0;
 
   return (
     <div className="space-y-8 animate-fade-in pb-16">
       
       {/* Top Bar Navigation */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-4">
         <button
           onClick={() => navigate(-1)}
           className="inline-flex items-center gap-2 text-xs font-extrabold text-slate-600 dark:text-slate-400 hover:text-rcpit-600 transition-colors"
@@ -399,7 +436,19 @@ export const ActivityDetail = () => {
           <ArrowLeft className="w-4 h-4" /> Back to Dashboard
         </button>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {canCancel && (
+            <button
+              onClick={() => {
+                setCancelSessionId('');
+                setShowCancelModal(true);
+              }}
+              className="px-3.5 py-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-extrabold flex items-center gap-2 hover:bg-rose-100 transition-all shadow-sm"
+            >
+              <XCircle className="w-4 h-4" /> Cancel Booking
+            </button>
+          )}
+
           <button
             onClick={() => setShowQrModal(true)}
             className="px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-xs font-extrabold flex items-center gap-2 text-slate-700 dark:text-slate-300 shadow-sm hover:border-rcpit-500"
@@ -430,6 +479,53 @@ export const ActivityDetail = () => {
         </div>
       </div>
 
+      {/* Cancellation Banner if CANCELLED */}
+      {activity.status === 'CANCELLED' && (
+        <div className="p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/50 border-2 border-rose-300 dark:border-rose-800 flex items-start gap-4 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-rose-600 text-white shrink-0 mt-0.5">
+            <XCircle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1 text-xs">
+            <h3 className="font-extrabold text-sm text-rose-900 dark:text-rose-200">
+              Activity Booking Officially Cancelled
+            </h3>
+            <p className="text-rose-800 dark:text-rose-300">
+              <strong>Reason:</strong> {activity.cancellationReason || 'No reason specified'}
+            </p>
+            <p className="text-[11px] text-rose-600 dark:text-rose-400">
+              Cancelled on {activity.cancelledAt ? new Date(activity.cancelledAt).toLocaleString() : 'N/A'}. Reserved physical venue slot has been released back into the institutional pool and reallocated via FCFS waiting queue.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Rejection Banner if REJECTED */}
+      {(activity.status === 'REJECTED' || activity.rejectionReason) && activity.status !== 'CANCELLED' && (
+        <div className="p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/50 border-2 border-amber-300 dark:border-amber-800 flex items-start gap-4 shadow-sm">
+          <div className="p-2.5 rounded-2xl bg-amber-600 text-white shrink-0 mt-0.5">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div className="space-y-1 text-xs">
+            <h3 className="font-extrabold text-sm text-amber-900 dark:text-amber-200">
+              Proposal Returned / Rejected with Institutional Feedback
+            </h3>
+            <p className="text-amber-800 dark:text-amber-300">
+              <strong>Mandatory Rejection Reason:</strong> {activity.rejectionReason}
+            </p>
+            {activity.rejectionHistory && activity.rejectionHistory.length > 0 && (
+              <div className="pt-2 text-[11px] text-amber-700 dark:text-amber-400 space-y-1 border-t border-amber-200 dark:border-amber-800/60 mt-2">
+                <span className="font-bold uppercase tracking-wider block">Rejection Audit Log:</span>
+                {activity.rejectionHistory.map((rh, idx) => (
+                  <div key={idx}>
+                    • [{rh.rejectedByRole}] {rh.reason} ({new Date(rh.rejectedAt).toLocaleString()})
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main Activity Header Banner */}
       <div className="glass-card p-6 md:p-8 space-y-6 relative overflow-hidden">
         {activity.isLocked && (
@@ -440,8 +536,30 @@ export const ActivityDetail = () => {
 
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div className="space-y-2 max-w-3xl">
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <StatusBadge status={activity.status} />
+              
+              {activity.isAllDay && (
+                <span className="text-xs font-black px-3 py-1 rounded-full bg-amber-500 text-slate-950 uppercase tracking-wider shadow-sm">
+                  All-Day (06:00 - 22:00)
+                </span>
+              )}
+
+              {activity.sessions && activity.sessions.length > 1 && (
+                <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
+                  Multi-Session ({activity.sessions.length} Slots)
+                </span>
+              )}
+
+              {activity.hodPriority && (
+                <span className={`text-xs font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-sm ${
+                  activity.hodPriority === 'HIGH' ? 'bg-rose-600 text-white animate-pulse' :
+                  activity.hodPriority === 'MEDIUM' ? 'bg-amber-500 text-slate-950' : 'bg-slate-200 text-slate-800'
+                }`} title={`HOD Priority: ${activity.hodPriorityReason || ''}`}>
+                  HOD Priority: {activity.hodPriority}
+                </span>
+              )}
+
               <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                 {activity.category}
               </span>
@@ -449,9 +567,17 @@ export const ActivityDetail = () => {
                 {activity.departmentId?.name}
               </span>
             </div>
+
             <h1 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white leading-tight">
               {activity.title}
             </h1>
+
+            {activity.hodPriorityReason && (
+              <p className="text-xs text-amber-700 dark:text-amber-400 font-semibold italic">
+                HOD Recommendation Note: "{activity.hodPriorityReason}"
+              </p>
+            )}
+
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Coordinator: <span className="font-bold text-slate-800 dark:text-slate-200">{activity.coordinatorId?.name}</span> ({activity.coordinatorId?.designation})
             </p>
@@ -478,9 +604,9 @@ export const ActivityDetail = () => {
               <Calendar className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase">Date & Time</span>
+              <span className="text-[10px] text-slate-400 font-bold block uppercase">Primary Schedule</span>
               <span className="font-extrabold text-slate-800 dark:text-slate-200">
-                {new Date(activity.date).toLocaleDateString()} ({activity.startTime} - {activity.endTime})
+                {new Date(activity.date).toLocaleDateString()} ({activity.isAllDay ? 'All-Day' : `${activity.startTime} - ${activity.endTime}`})
               </span>
             </div>
           </div>
@@ -490,7 +616,7 @@ export const ActivityDetail = () => {
               <MapPin className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase">Assigned Venue</span>
+              <span className="text-[10px] text-slate-400 font-bold block uppercase">Primary Venue</span>
               <span className="font-extrabold text-slate-800 dark:text-slate-200">
                 {activity.venueName || activity.venueId?.name || 'Venue Not Assigned'}
               </span>
@@ -502,7 +628,7 @@ export const ActivityDetail = () => {
               <Users className="w-4 h-4" />
             </div>
             <div>
-              <span className="text-[10px] text-slate-400 font-bold block uppercase">Target Attendees</span>
+              <span className="text-[10px] text-slate-400 font-bold block uppercase">Expected Attendees</span>
               <span className="font-extrabold text-slate-800 dark:text-slate-200">
                 {activity.expectedParticipants} Attendees ({activity.targetAudience})
               </span>
@@ -554,24 +680,116 @@ export const ActivityDetail = () => {
 
       {/* TAB: OVERVIEW */}
       {activeTab === 'overview' && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 glass-card p-6 space-y-4">
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-              Activity Objectives & Scope
-            </h3>
-            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
-              {activity.description || 'No detailed objectives provided.'}
-            </p>
-          </div>
+        <div className="space-y-6">
+          
+          {/* Multi-Session Breakdown Table if present */}
+          {activity.sessions && activity.sessions.length > 0 && (
+            <div className="glass-card p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-rcpit-600" /> Multi-Session Schedule Breakdown ({activity.sessions.length} Sessions)
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Individual scheduled occurrences under this single institutional activity record
+                  </p>
+                </div>
+              </div>
 
-          <div className="glass-card p-6 space-y-4 text-xs">
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
-              Resource Requirements
-            </h3>
-            <div className="space-y-2 text-slate-600 dark:text-slate-400">
-              <p>• Audio Visual System: <strong className="text-slate-800 dark:text-slate-200">Required</strong></p>
-              <p>• High-Speed Wi-Fi / LAN: <strong className="text-slate-800 dark:text-slate-200">Required</strong></p>
-              <p>• Certificate Generation: <strong className="text-slate-800 dark:text-slate-200">Enabled</strong></p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px]">
+                      <th className="pb-2.5 px-3">Session #</th>
+                      <th className="pb-2.5 px-3">Session Title</th>
+                      <th className="pb-2.5 px-3">Date</th>
+                      <th className="pb-2.5 px-3">Time Range</th>
+                      <th className="pb-2.5 px-3">Venue</th>
+                      <th className="pb-2.5 px-3">Status</th>
+                      {canCancel && <th className="pb-2.5 px-3 text-right">Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {activity.sessions.map((sess) => {
+                      const isSessCancelled = sess.status === 'CANCELLED' || activity.status === 'CANCELLED';
+                      return (
+                        <tr key={sess._id || sess.sessionNumber} className={isSessCancelled ? 'opacity-60 bg-rose-50/20' : ''}>
+                          <td className="py-3 px-3 font-bold text-slate-500">#{sess.sessionNumber}</td>
+                          <td className="py-3 px-3 font-black text-slate-900 dark:text-white">
+                            {sess.title || `Session ${sess.sessionNumber}`}
+                          </td>
+                          <td className="py-3 px-3 text-slate-700 dark:text-slate-300 font-semibold">
+                            {new Date(sess.date).toLocaleDateString()}
+                          </td>
+                          <td className="py-3 px-3 text-slate-600 dark:text-slate-400">
+                            {sess.isAllDay ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 font-bold text-[10px]">
+                                All-Day (06:00 - 22:00)
+                              </span>
+                            ) : (
+                              `${sess.startTime} - ${sess.endTime}`
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-semibold text-slate-800 dark:text-slate-200">
+                            {sess.venueName || sess.venueId?.name || activity.venueName}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase ${
+                              isSessCancelled ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {isSessCancelled ? 'CANCELLED' : (sess.status || 'SCHEDULED')}
+                            </span>
+                          </td>
+                          {canCancel && (
+                            <td className="py-3 px-3 text-right">
+                              {!isSessCancelled && (
+                                <button
+                                  onClick={() => {
+                                    setCancelSessionId(sess._id);
+                                    setShowCancelModal(true);
+                                  }}
+                                  className="px-2.5 py-1 text-[10px] font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors border border-rose-200 dark:border-rose-900"
+                                >
+                                  Cancel Session
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 glass-card p-6 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                  Activity Objectives & Scope
+                </h3>
+                <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-full">
+                  Word Count: {descWordCount} / 300 words
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                {activity.description || 'No detailed objectives provided.'}
+              </p>
+            </div>
+
+            <div className="glass-card p-6 space-y-4 text-xs">
+              <h3 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider">
+                Resource & Venue Specifications
+              </h3>
+              <div className="space-y-2.5 text-slate-600 dark:text-slate-400">
+                <p>• Expected Attendance: <strong className="text-slate-800 dark:text-slate-200">{activity.expectedParticipants} Persons</strong></p>
+                <p>• Audio Visual System: <strong className="text-slate-800 dark:text-slate-200">Required</strong></p>
+                <p>• High-Speed Wi-Fi / LAN: <strong className="text-slate-800 dark:text-slate-200">Required</strong></p>
+                <p>• Certificate Generation: <strong className="text-slate-800 dark:text-slate-200">Enabled</strong></p>
+                <p>• Operating Window: <strong className="text-slate-800 dark:text-slate-200">06:00 AM - 10:00 PM (Asia/Kolkata)</strong></p>
+              </div>
             </div>
           </div>
         </div>
@@ -1156,6 +1374,96 @@ export const ActivityDetail = () => {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Cancellation Modal */}
+      {showCancelModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-5 text-xs">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-rose-100 text-rose-600">
+                  <XCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-base text-slate-900 dark:text-white">Cancel Activity Booking</h3>
+                  <p className="text-[11px] text-slate-400">Release reserved physical slot back to RCPIT pool</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCancelModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+              <p className="font-extrabold text-slate-800 dark:text-slate-200">{activity.title}</p>
+              <p className="text-slate-500 text-[11px]">
+                Venue: <strong>{activity.venueName || activity.venueId?.name}</strong> • Schedule: <strong>{new Date(activity.date).toLocaleDateString()} ({activity.startTime} - {activity.endTime})</strong>
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/80 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1 text-amber-900 dark:text-amber-200 text-[11px]">
+                <p className="font-bold">Instant Smart Slot Release Notice:</p>
+                <p className="leading-relaxed">
+                  Confirming cancellation will immediately release the reserved venue and time slot in MongoDB. The next eligible requester waiting in the FCFS Queue will be offered this slot. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCancelBooking} className="space-y-4">
+              {activity.sessions && activity.sessions.length > 1 && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Cancellation Scope:
+                  </label>
+                  <select
+                    value={cancelSessionId}
+                    onChange={(e) => setCancelSessionId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-semibold"
+                  >
+                    <option value="">Entire Activity (Cancel all {activity.sessions.length} sessions)</option>
+                    {activity.sessions.filter(s => s.status !== 'CANCELLED').map(s => (
+                      <option key={s._id} value={s._id}>
+                        Session #{s.sessionNumber}: {new Date(s.date).toLocaleDateString()} ({s.startTime}-{s.endTime})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Mandatory Cancellation Reason <span className="text-rose-500">*</span>
+                </label>
+                <textarea
+                  rows="3"
+                  required
+                  placeholder="Provide institutional justification for cancelling this booking..."
+                  value={cancellationReason}
+                  onChange={(e) => setCancellationReason(e.target.value)}
+                  className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowCancelModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 dark:bg-slate-800 font-bold rounded-xl text-slate-700 dark:text-slate-300"
+                >
+                  Keep Booking
+                </button>
+                <button
+                  type="submit"
+                  disabled={cancelling || !cancellationReason.trim()}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-extrabold rounded-xl shadow-lg transition-all"
+                >
+                  {cancelling ? 'Releasing Slot...' : 'Confirm & Release Slot'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

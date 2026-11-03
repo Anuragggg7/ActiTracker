@@ -9,7 +9,8 @@ import PDFViewerModal from '../components/PDFViewerModal';
 import CreateActivityModal from '../components/CreateActivityModal';
 import {
   Users, CheckSquare, Download, CheckCircle2, XCircle, AlertCircle, Plus,
-  Send, RotateCcw, Clock, Eye, Calendar, MapPin, DollarSign, MessageSquare, ShieldCheck, X
+  Send, RotateCcw, Clock, Eye, Calendar, MapPin, DollarSign, MessageSquare, ShieldCheck, X,
+  Flame, Zap, Award
 } from 'lucide-react';
 
 export const HodDashboard = () => {
@@ -24,9 +25,11 @@ export const HodDashboard = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Review Dialog State
-  const [activeModal, setActiveModal] = useState(null); // 'FORWARD', 'REQUEST_CHANGES', 'REJECT'
+  const [activeModal, setActiveModal] = useState(null); // 'FORWARD', 'REQUEST_CHANGES', 'REJECT', 'UPDATE_PRIORITY'
   const [selectedActivity, setSelectedActivity] = useState(null);
   const [reviewNotes, setReviewNotes] = useState('');
+  const [priority, setPriority] = useState('NORMAL'); // 'HIGH', 'MEDIUM', 'NORMAL'
+  const [priorityReason, setPriorityReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
   const fetchHodData = async () => {
@@ -44,7 +47,6 @@ export const HodDashboard = () => {
       if (pendingRes && pendingRes.success) {
         setPendingRequests(pendingRes.activities || []);
       } else {
-        // Fallback to general activities query filtered by department
         const actRes = await api.get('/activities').catch(() => ({ success: false }));
         if (actRes && actRes.success) {
           const all = actRes.activities || [];
@@ -75,6 +77,8 @@ export const HodDashboard = () => {
     setSelectedActivity(act);
     setActiveModal(actionType);
     setReviewNotes('');
+    setPriority(act.hodPriority || 'NORMAL');
+    setPriorityReason(act.hodPriorityReason || '');
   };
 
   const handleExecuteReview = async () => {
@@ -87,9 +91,25 @@ export const HodDashboard = () => {
 
     try {
       setActionLoading(true);
+
+      if (activeModal === 'UPDATE_PRIORITY') {
+        const res = await api.patch(`/activities/${selectedActivity._id}/priority`, {
+          priority,
+          priorityReason: priorityReason.trim()
+        });
+        if (res && res.success) {
+          showToast(res.message || 'Priority updated successfully', 'success');
+          setActiveModal(null);
+          fetchHodData();
+        }
+        return;
+      }
+
       const res = await api.put(`/activities/${selectedActivity._id}/hod-review`, {
         action: activeModal,
-        notes: reviewNotes.trim()
+        notes: reviewNotes.trim(),
+        priority,
+        priorityReason: priorityReason.trim()
       });
 
       if (res && res.success) {
@@ -97,13 +117,13 @@ export const HodDashboard = () => {
         const updatedAct = res.activity || {
           ...selectedActivity,
           status: activeModal === 'FORWARD' ? 'ADMIN_REVIEW' : activeModal === 'REJECT' ? 'REJECTED' : 'CHANGES_REQUIRED',
-          hodReviewNotes: reviewNotes.trim()
+          hodReviewNotes: reviewNotes.trim(),
+          hodPriority: priority,
+          hodPriorityReason: priorityReason.trim()
         };
 
-        // Remove from pending queue immediately
         setPendingRequests(prev => prev.filter(a => a?._id !== selectedActivity._id));
 
-        // If forwarded, add to forwardedRequests tracker
         if (activeModal === 'FORWARD') {
           setForwardedRequests(prev => [updatedAct, ...prev.filter(a => a?._id !== updatedAct._id)]);
         }
@@ -111,6 +131,8 @@ export const HodDashboard = () => {
         setActiveModal(null);
         setSelectedActivity(null);
         setReviewNotes('');
+        setPriority('NORMAL');
+        setPriorityReason('');
         await fetchHodData();
       } else {
         showToast(res?.message || 'Action could not be completed', 'error');
@@ -120,6 +142,28 @@ export const HodDashboard = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const renderPriorityBadge = (p) => {
+    if (p === 'HIGH') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 font-extrabold text-[10px] inline-flex items-center gap-1 border border-rose-300 dark:border-rose-800">
+          <Flame className="w-3 h-3 text-rose-600" /> HIGH PRIORITY
+        </span>
+      );
+    }
+    if (p === 'MEDIUM') {
+      return (
+        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 font-extrabold text-[10px] inline-flex items-center gap-1 border border-amber-300 dark:border-amber-800">
+          <Zap className="w-3 h-3 text-amber-600" /> MEDIUM PRIORITY
+        </span>
+      );
+    }
+    return (
+      <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-bold text-[10px] inline-flex items-center gap-1 border border-slate-200 dark:border-slate-700">
+        NORMAL PRIORITY
+      </span>
+    );
   };
 
   return (
@@ -134,7 +178,7 @@ export const HodDashboard = () => {
             {user?.department?.name || deptInfo?.name || 'Department'} HOD Dashboard
           </h1>
           <p className="text-xs text-slate-300 mt-1">
-            Department HOD: {user?.name} ({user?.email}) • Proposal Review & Recommendation Queue
+            Department HOD: {user?.name} ({user?.email}) • Proposal Review, Priority Recommendation & Verification Queue
           </p>
         </div>
 
@@ -159,7 +203,7 @@ export const HodDashboard = () => {
       {/* Action Center */}
       <ActionCenter />
 
-      {/* SECTION 1: Pending Activity Requests (Review & Forward to Admin) */}
+      {/* SECTION 1: Pending Activity Requests (Review & Forward to Admin with Priority) */}
       <div className="glass-card p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div>
@@ -167,7 +211,7 @@ export const HodDashboard = () => {
               <CheckSquare className="w-5 h-5 text-rcpit-600" /> Pending Activity Requests
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Review proposed activities from your department and forward to Admin for final institutional approval
+              Review proposed activities from your department and forward to Admin with your priority recommendation
             </p>
           </div>
           <span className="text-xs font-bold text-rcpit-600 dark:text-rcpit-400 bg-rcpit-50 dark:bg-rcpit-950/60 border border-rcpit-200 dark:border-rcpit-800 px-3 py-1 rounded-full">
@@ -198,6 +242,11 @@ export const HodDashboard = () => {
                       <span className="text-[10px] font-bold text-slate-500">
                         Submitted: {new Date(act.createdAt).toLocaleDateString()}
                       </span>
+                      {act.isAllDay && (
+                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-black uppercase">
+                          All-Day
+                        </span>
+                      )}
                     </div>
                     <h4 className="text-base font-extrabold text-slate-900 dark:text-white mt-1" title={act.title}>
                       {act.title}
@@ -217,7 +266,7 @@ export const HodDashboard = () => {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                     <Calendar className="w-3.5 h-3.5 text-rcpit-600 shrink-0" />
-                    <span>{new Date(act.date).toLocaleDateString()} ({act.startTime} - {act.endTime})</span>
+                    <span>{new Date(act.date).toLocaleDateString()} ({act.isAllDay ? 'All-Day' : `${act.startTime} - ${act.endTime}`})</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                     <MapPin className="w-3.5 h-3.5 text-sky-600 shrink-0" />
@@ -225,7 +274,7 @@ export const HodDashboard = () => {
                   </div>
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                     <Users className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                    <span>{act.expectedParticipants} Attendees</span>
+                    <span>{act.expectedParticipants} Expected Attendees</span>
                   </div>
                   <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
                     <DollarSign className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -233,20 +282,27 @@ export const HodDashboard = () => {
                   </div>
                 </div>
 
+                {/* Multi-Session summary if present */}
+                {Array.isArray(act.sessions) && act.sessions.length > 1 && (
+                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-xs">
+                    <span className="font-bold text-rcpit-600 dark:text-rcpit-400 text-[11px]">
+                      Multi-Session Schedule ({act.sessions.length} sessions):
+                    </span>
+                    <div className="flex flex-wrap gap-2 mt-1">
+                      {act.sessions.map((s, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded bg-white dark:bg-slate-900 text-[10px] text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-medium">
+                          {s.sessionTitle || `Session ${idx + 1}`}: {new Date(s.date).toLocaleDateString()} ({s.isAllDay ? 'All-Day' : `${s.startTime}-${s.endTime}`}) @ {s.venueName || 'TBD'}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* HOD Review Actions Bar */}
                 <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-200 dark:border-slate-800">
-                  {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) ? (
-                    <Link
-                      to={`/activities/${act._id}`}
-                      className="text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-rcpit-600 flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> View Full Activity Details
-                    </Link>
-                  ) : (
-                    <span className="text-[11px] font-semibold text-slate-400 italic">
-                      Institutional Review Pending
-                    </span>
-                  )}
+                  <span className="text-[11px] font-semibold text-slate-400 italic">
+                    Institutional Review Pending
+                  </span>
 
                   <div className="flex items-center gap-2">
                     <button
@@ -265,7 +321,7 @@ export const HodDashboard = () => {
                       onClick={() => openActionModal(act, 'FORWARD')}
                       className="px-4 py-1.5 bg-rcpit-600 hover:bg-rcpit-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1.5"
                     >
-                      <Send className="w-3.5 h-3.5" /> Forward to Admin for Approval
+                      <Send className="w-3.5 h-3.5" /> Forward to Admin (With Priority)
                     </button>
                   </div>
                 </div>
@@ -275,7 +331,7 @@ export const HodDashboard = () => {
         )}
       </div>
 
-      {/* SECTION 2: Forwarded Activity Requests (Tracking Queue) */}
+      {/* SECTION 2: Forwarded Activity Requests (Tracking Queue with Recommended Priority) */}
       <div className="glass-card p-6 space-y-4">
         <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
           <div>
@@ -283,7 +339,7 @@ export const HodDashboard = () => {
               <Clock className="w-5 h-5 text-sky-600" /> Forwarded Activity Requests Tracker
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              History of proposals endorsed by HOD and their current stage in Admin review and institutional scheduling
+              History of proposals endorsed by HOD, their recommended priority, and current stage in Admin review
             </p>
           </div>
           <span className="text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded-full">
@@ -302,60 +358,58 @@ export const HodDashboard = () => {
                 <tr>
                   <th className="p-3">Activity Title</th>
                   <th className="p-3">Coordinator</th>
-                  <th className="p-3">Event Date</th>
-                  <th className="p-3">Venue</th>
+                  <th className="p-3">Schedule</th>
+                  <th className="p-3">HOD Priority</th>
                   <th className="p-3">Current Status</th>
-                  <th className="p-3">HOD Review Notes</th>
+                  <th className="p-3">HOD Notes & Reason</th>
                   <th className="p-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {forwardedRequests.map((act) => (
                   <tr key={act._id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="p-3 font-extrabold text-slate-900 dark:text-white">
-                      {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) ? (
-                        <Link
-                          to={`/activities/${act._id}`}
-                          className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block cursor-pointer"
-                          title={act.title}
-                        >
-                          {act.title}
-                        </Link>
-                      ) : (
-                        <span className="block" title={act.title}>
-                          {act.title}
-                        </span>
-                      )}
+                    <td className="p-3 font-extrabold text-slate-900 dark:text-white max-w-xs">
+                      <Link
+                        to={`/activities/${act._id}`}
+                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block truncate cursor-pointer"
+                        title={act.title}
+                      >
+                        {act.title}
+                      </Link>
                       <span className="text-[10px] text-rcpit-600 dark:text-rcpit-400 font-bold">{act.category}</span>
                     </td>
                     <td className="p-3 text-slate-600 dark:text-slate-400">
                       {act.coordinatorId?.name || 'Faculty'}
                     </td>
                     <td className="p-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                      {new Date(act.date).toLocaleDateString()}
+                      <div>{new Date(act.date).toLocaleDateString()}</div>
+                      <div className="text-[10px] text-slate-400">{act.venueName || 'TBD'}</div>
                     </td>
-                    <td className="p-3 text-slate-600 dark:text-slate-400">
-                      {act.venueName || act.venueId?.name || 'TBD'}
+                    <td className="p-3 whitespace-nowrap">
+                      {renderPriorityBadge(act.hodPriority)}
                     </td>
                     <td className="p-3">
                       <StatusBadge status={act.status} size="xs" />
                     </td>
-                    <td className="p-3 text-slate-500 dark:text-slate-400 max-w-xs truncate">
-                      {act.hodReviewNotes || '—'}
+                    <td className="p-3 text-slate-500 dark:text-slate-400 max-w-xs truncate" title={act.hodPriorityReason || act.hodReviewNotes}>
+                      {act.hodPriorityReason || act.hodReviewNotes || '—'}
                     </td>
-                    <td className="p-3 text-right">
-                      {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) ? (
-                        <Link
-                          to={`/activities/${act._id}`}
-                          className="px-2.5 py-1 bg-rcpit-50 hover:bg-rcpit-100 text-rcpit-700 dark:bg-rcpit-950/60 dark:hover:bg-rcpit-900/60 dark:text-rcpit-300 font-bold rounded-lg transition-colors inline-flex items-center gap-1"
+                    <td className="p-3 text-right space-x-1 whitespace-nowrap">
+                      {act.status === 'ADMIN_REVIEW' && (
+                        <button
+                          onClick={() => openActionModal(act, 'UPDATE_PRIORITY')}
+                          className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-bold rounded-lg text-[10px] transition-colors"
+                          title="Update HOD Priority Recommendation"
                         >
-                          <Eye className="w-3 h-3" /> View
-                        </Link>
-                      ) : (
-                        <span className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md">
-                          Awaiting Admin
-                        </span>
+                          Edit Priority
+                        </button>
                       )}
+                      <Link
+                        to={`/activities/${act._id}`}
+                        className="px-2.5 py-1 bg-rcpit-50 hover:bg-rcpit-100 text-rcpit-700 dark:bg-rcpit-950/60 dark:hover:bg-rcpit-900/60 dark:text-rcpit-300 font-bold rounded-lg transition-colors inline-flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3" /> View
+                      </Link>
                     </td>
                   </tr>
                 ))}
@@ -365,7 +419,7 @@ export const HodDashboard = () => {
         )}
       </div>
 
-      {/* Review Modal: Forward, Request Changes, or Reject */}
+      {/* Review Modal: Forward with Priority, Request Changes, or Reject */}
       {activeModal && selectedActivity && (
         <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
           <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
@@ -374,6 +428,7 @@ export const HodDashboard = () => {
                 {activeModal === 'FORWARD' && <><Send className="w-4 h-4 text-rcpit-600" /> Forward Proposal to Admin</>}
                 {activeModal === 'REQUEST_CHANGES' && <><RotateCcw className="w-4 h-4 text-amber-600" /> Request Corrections from Faculty</>}
                 {activeModal === 'REJECT' && <><XCircle className="w-4 h-4 text-rose-600" /> Reject Activity Proposal</>}
+                {activeModal === 'UPDATE_PRIORITY' && <><Award className="w-4 h-4 text-amber-600" /> Update HOD Priority Recommendation</>}
               </h3>
               <button
                 onClick={() => setActiveModal(null)}
@@ -392,28 +447,78 @@ export const HodDashboard = () => {
               </p>
             </div>
 
-            <div className="space-y-1 text-xs">
-              <label className="block font-bold text-slate-700 dark:text-slate-300">
-                {activeModal === 'FORWARD'
-                  ? 'Endorsement Notes for Admin (Optional):'
-                  : activeModal === 'REQUEST_CHANGES'
-                  ? 'Mandatory Correction Notes for Faculty *:'
-                  : 'Mandatory Rejection Explanation Reason *:'}
-              </label>
-              <textarea
-                rows={3}
-                value={reviewNotes}
-                onChange={(e) => setReviewNotes(e.target.value)}
-                placeholder={
-                  activeModal === 'FORWARD'
-                    ? 'e.g. Recommended for execution. Budget and syllabus alignment checked.'
+            {/* Enhancement E: HOD Priority Selection in Forward & Update Priority Modals */}
+            {(activeModal === 'FORWARD' || activeModal === 'UPDATE_PRIORITY') && (
+              <div className="space-y-3 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Recommend Institutional Priority for Admin Review:
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { val: 'NORMAL', label: 'NORMAL', color: 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300' },
+                      { val: 'MEDIUM', label: 'MEDIUM', color: 'border-amber-400 text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40' },
+                      { val: 'HIGH', label: 'HIGH', color: 'border-rose-400 text-rose-700 dark:text-rose-300 bg-rose-50 dark:bg-rose-950/40' }
+                    ].map(opt => (
+                      <button
+                        key={opt.val}
+                        type="button"
+                        onClick={() => setPriority(opt.val)}
+                        className={`py-2 px-2 rounded-xl text-xs font-black border transition-all text-center ${
+                          priority === opt.val
+                            ? `${opt.color} ring-2 ring-rcpit-500 shadow-sm`
+                            : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-400 hover:text-slate-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Priority assists Admin triage. It does not bypass venue conflict prevention or FCFS ordering.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Priority Recommendation Reason:
+                  </label>
+                  <input
+                    type="text"
+                    value={priorityReason}
+                    onChange={(e) => setPriorityReason(e.target.value)}
+                    placeholder="e.g. Flagship annual symposium, industry collaboration requirement..."
+                    className="w-full p-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none text-xs"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Rejection / Correction / Review Notes */}
+            {activeModal !== 'UPDATE_PRIORITY' && (
+              <div className="space-y-1 text-xs">
+                <label className="block font-bold text-slate-700 dark:text-slate-300">
+                  {activeModal === 'FORWARD'
+                    ? 'General Endorsement Notes for Admin (Optional):'
                     : activeModal === 'REQUEST_CHANGES'
-                    ? 'e.g. Please adjust the target audience and refine the expected learning outcomes.'
-                    : 'e.g. Clashes with mid-term examinations. Please propose in next term.'
-                }
-                className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-rcpit-500 outline-none"
-              />
-            </div>
+                    ? 'Mandatory Correction Notes for Faculty *:'
+                    : 'Mandatory Rejection Explanation Reason *:'}
+                </label>
+                <textarea
+                  rows={3}
+                  value={reviewNotes}
+                  onChange={(e) => setReviewNotes(e.target.value)}
+                  placeholder={
+                    activeModal === 'FORWARD'
+                      ? 'e.g. Recommended for execution. Budget and syllabus alignment checked.'
+                      : activeModal === 'REQUEST_CHANGES'
+                      ? 'e.g. Please adjust the target audience and refine the expected learning outcomes.'
+                      : 'e.g. Clashes with mid-term examinations. Please propose in next term.'
+                  }
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-rcpit-500 outline-none"
+                />
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <button
@@ -432,10 +537,20 @@ export const HodDashboard = () => {
                     ? 'bg-rcpit-600 hover:bg-rcpit-500'
                     : activeModal === 'REQUEST_CHANGES'
                     ? 'bg-amber-600 hover:bg-amber-500'
+                    : activeModal === 'UPDATE_PRIORITY'
+                    ? 'bg-amber-600 hover:bg-amber-500'
                     : 'bg-rose-600 hover:bg-rose-500'
                 }`}
               >
-                {actionLoading ? 'Processing...' : activeModal === 'FORWARD' ? 'Confirm & Forward' : activeModal === 'REQUEST_CHANGES' ? 'Send Correction Notes' : 'Confirm Rejection'}
+                {actionLoading
+                  ? 'Processing...'
+                  : activeModal === 'FORWARD'
+                  ? 'Confirm & Forward'
+                  : activeModal === 'REQUEST_CHANGES'
+                  ? 'Send Correction Notes'
+                  : activeModal === 'UPDATE_PRIORITY'
+                  ? 'Save Priority'
+                  : 'Confirm Rejection'}
               </button>
             </div>
           </div>

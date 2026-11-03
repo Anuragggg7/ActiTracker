@@ -8,16 +8,18 @@ import {
   getPendingHodActivitiesService,
   getForwardedHodActivitiesService,
   hodReviewActivityService,
+  updateHodPriorityService,
   getPendingAdminActivitiesService,
   adminApproveActivityService,
   adminRejectActivityService,
   adminRequestChangesActivityService,
+  cancelActivityService,
   updateActivityStatusService,
   updateActivityService,
   updateActivityBudgetService,
   getActivityApprovalsService
 } from '../services/activityService.js';
-import { SlotConflictError } from '../services/slotService.js';
+import { getCancellationHistoryService, SlotConflictError } from '../services/slotService.js';
 
 // Create Activity
 export const createActivity = async (req, res) => {
@@ -46,7 +48,14 @@ export const createActivity = async (req, res) => {
         alternativeSlots: error.alternativeSlots
       });
     }
-    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+      venueCapacityExceeded: error.venueCapacityExceeded || false,
+      configuredCapacity: error.configuredCapacity,
+      requestedCount: error.requestedCount,
+      alternativeVenues: error.alternativeVenues || []
+    });
   }
 };
 
@@ -101,16 +110,18 @@ export const getForwardedHodActivities = async (req, res) => {
   }
 };
 
-// HOD Review / Forward Activity
+// HOD Review / Forward Activity (Enhancements E & F)
 export const reviewActivityByHod = async (req, res) => {
   try {
     const { id } = req.params;
-    const { action, notes } = req.body;
+    const { action, notes, priority, priorityReason } = req.body;
 
     const result = await hodReviewActivityService({
       id,
       action: action || 'FORWARD',
       notes,
+      priority: priority || 'NORMAL',
+      priorityReason: priorityReason || '',
       user: req.user,
       req
     });
@@ -121,16 +132,42 @@ export const reviewActivityByHod = async (req, res) => {
   }
 };
 
+// Update HOD Priority Recommendation
+export const updateHodPriority = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { priority, priorityReason } = req.body;
+
+    const activity = await updateHodPriorityService({
+      id,
+      priority,
+      priorityReason,
+      user: req.user,
+      req
+    });
+
+    res.json({
+      success: true,
+      message: `Priority recommendation updated to ${priority}`,
+      activity
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
 // Dedicated Endpoint: Forward Activity to Admin (HOD)
 export const forwardActivityToAdmin = async (req, res) => {
   try {
     const { id } = req.params;
-    const { notes } = req.body;
+    const { notes, priority, priorityReason } = req.body;
 
     const result = await hodReviewActivityService({
       id,
       action: 'FORWARD',
       notes,
+      priority: priority || 'NORMAL',
+      priorityReason: priorityReason || '',
       user: req.user,
       req
     });
@@ -183,7 +220,7 @@ export const adminApproveActivity = async (req, res) => {
   }
 };
 
-// Admin Rejection
+// Admin Rejection (Enhancement F)
 export const adminRejectActivity = async (req, res) => {
   try {
     const { id } = req.params;
@@ -216,6 +253,40 @@ export const adminRequestChangesActivity = async (req, res) => {
     });
 
     res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Cancel Activity Booking (Enhancement C: Immediate slot release and FCFS waiting queue trigger)
+export const cancelActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { sessionId, reason } = req.body;
+
+    const result = await cancelActivityService({
+      id,
+      sessionId,
+      reason,
+      user: req.user,
+      req
+    });
+
+    res.json(result);
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// Get Cancellation History
+export const getCancellationHistory = async (req, res) => {
+  try {
+    const history = await getCancellationHistoryService({
+      activityId: req.params.id || req.query.activityId,
+      user: req.user
+    });
+
+    res.json({ success: true, count: history.length, history });
   } catch (error) {
     res.status(error.statusCode || 500).json({ success: false, message: error.message });
   }

@@ -46,13 +46,37 @@ const activitySchema = new mongoose.Schema(
       contact: { type: String, default: '' }
     },
 
-    // Schedule details
+    // Schedule details (Primary / First occurrence for backward compatibility)
     date: { type: Date, required: true },
     startTime: { type: String, required: true }, // e.g. "10:00"
     endTime: { type: String, required: true }, // e.g. "13:00"
     durationHours: { type: Number, default: 3 },
+    isAllDay: { type: Boolean, default: false },
     venueId: { type: mongoose.Schema.Types.ObjectId, ref: 'Venue' },
     venueName: { type: String, default: 'TBD' },
+
+    // Multiple sessions / time slots support (Enhancement B)
+    sessions: [
+      {
+        sessionTitle: { type: String, default: '' },
+        date: { type: Date, required: true },
+        startTime: { type: String, required: true },
+        endTime: { type: String, required: true },
+        durationHours: { type: Number, default: 3 },
+        isAllDay: { type: Boolean, default: false },
+        venueId: { type: mongoose.Schema.Types.ObjectId, ref: 'Venue' },
+        venueName: { type: String, default: 'TBD' },
+        expectedParticipants: { type: Number, default: 50 },
+        status: {
+          type: String,
+          enum: ['SCHEDULED', 'CONDUCTED', 'CANCELLED'],
+          default: 'SCHEDULED'
+        },
+        cancelledAt: { type: Date },
+        cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        cancellationReason: { type: String, default: '' }
+      }
+    ],
 
     // Participants count estimate
     expectedParticipants: { type: Number, default: 50 },
@@ -113,7 +137,35 @@ const activitySchema = new mongoose.Schema(
     adminDecisionAt: { type: Date },
     adminDecisionBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     adminSlotNotes: { type: String, default: '' },
+
+    // HOD Priority Recommendation (Enhancement E)
+    hodPriority: {
+      type: String,
+      enum: ['HIGH', 'MEDIUM', 'NORMAL'],
+      default: 'NORMAL'
+    },
+    hodPriorityReason: { type: String, default: '' },
+    hodPriorityAssignedAt: { type: Date },
+    hodPriorityAssignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+
+    // Mandatory Rejection Details & History (Enhancement F)
     rejectionReason: { type: String, default: '' },
+    rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    rejectedAt: { type: Date },
+    rejectedRole: { type: String, default: '' },
+    rejectionHistory: [
+      {
+        reason: { type: String, required: true },
+        rejectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        role: { type: String, default: '' },
+        rejectedAt: { type: Date, default: Date.now }
+      }
+    ],
+
+    // Cancellation Details (Enhancement C)
+    cancelledAt: { type: Date },
+    cancelledBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    cancellationReason: { type: String, default: '' },
 
     // Completeness Score & Lock Status
     reportId: { type: String, default: '' },
@@ -137,5 +189,7 @@ const activitySchema = new mongoose.Schema(
 activitySchema.index({ departmentId: 1, status: 1 });
 activitySchema.index({ venueId: 1, date: 1, status: 1 });
 activitySchema.index({ coordinatorId: 1 });
+activitySchema.index({ 'sessions.venueId': 1, 'sessions.date': 1, status: 1 });
+activitySchema.index({ hodPriority: 1 });
 
 export default mongoose.model('Activity', activitySchema);

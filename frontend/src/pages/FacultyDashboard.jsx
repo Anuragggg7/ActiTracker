@@ -10,18 +10,30 @@ import PDFViewerModal from '../components/PDFViewerModal';
 import CreateActivityModal from '../components/CreateActivityModal';
 import {
   Plus, Calendar, CheckSquare, Clock, FileText, QrCode, Download,
-  Layers, Search, AlertCircle, ArrowRight, Eye
+  Layers, Search, AlertCircle, ArrowRight, Eye, XCircle, CheckCircle2,
+  Bell, AlertTriangle, ShieldCheck, X
 } from 'lucide-react';
 
 export const FacultyDashboard = () => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
   const [activities, setActivities] = useState([]);
+  const [slotOffers, setSlotOffers] = useState([]);
+  const [waitingQueue, setWaitingQueue] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedQrActivity, setSelectedQrActivity] = useState(null);
   const [selectedPdfActivityId, setSelectedPdfActivityId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Cancellation Modal State (Enhancement C)
+  const [cancellingActivity, setCancellingActivity] = useState(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [selectedCancelSessionId, setSelectedCancelSessionId] = useState('');
+  const [cancellingLoading, setCancellingLoading] = useState(false);
+
+  // Offer Action State
+  const [offerActionLoading, setOfferActionLoading] = useState(false);
 
   const filteredActivities = activities.filter(act => {
     if (!searchTerm.trim()) return true;
@@ -34,29 +46,23 @@ export const FacultyDashboard = () => {
     );
   });
 
-  // Create Form State
-  const [createStep, setCreateStep] = useState(1);
-  const [form, setForm] = useState({
-    title: '',
-    category: 'Workshop',
-    description: '',
-    objectives: '',
-    targetAudience: 'Students & Faculty',
-    speakerName: '',
-    speakerOrg: '',
-    date: new Date().toISOString().split('T')[0],
-    startTime: '10:00',
-    endTime: '13:00',
-    expectedParticipants: '60',
-    estimatedBudget: '5000',
-    fundingSource: 'Departmental Budget'
-  });
-
-  const fetchMyActivities = async () => {
+  const fetchFacultyData = async () => {
     try {
-      const res = await api.get('/activities');
-      if (res.success) {
-        setActivities(res.activities || []);
+      setLoading(true);
+      const [actRes, offersRes, queueRes] = await Promise.all([
+        api.get('/activities').catch(() => ({ success: false })),
+        api.get('/slots/offers').catch(() => ({ success: false })),
+        api.get('/slots/waiting-queue').catch(() => ({ success: false }))
+      ]);
+
+      if (actRes && actRes.success) {
+        setActivities(actRes.activities || []);
+      }
+      if (offersRes && offersRes.success) {
+        setSlotOffers(offersRes.offers || []);
+      }
+      if (queueRes && queueRes.success) {
+        setWaitingQueue(queueRes.waitingQueue || []);
       }
     } catch (err) {
       console.error(err);
@@ -66,58 +72,51 @@ export const FacultyDashboard = () => {
   };
 
   useEffect(() => {
-    fetchMyActivities();
+    fetchFacultyData();
   }, []);
 
-  const handleCreateSubmit = async (isDraft = false) => {
-    try {
-      const payload = {
-        title: form.title,
-        category: form.category,
-        description: form.description,
-        objectives: form.objectives,
-        targetAudience: form.targetAudience,
-        guestSpeaker: { name: form.speakerName, organization: form.speakerOrg },
-        date: form.date,
-        startTime: form.startTime,
-        endTime: form.endTime,
-        expectedParticipants: Number(form.expectedParticipants),
-        estimatedBudget: Number(form.estimatedBudget),
-        fundingSource: form.fundingSource,
-        isDraft
-      };
+  // Handle Activity or Session Cancellation
+  const handleConfirmCancellation = async () => {
+    if (!cancellingActivity) return;
+    if (!cancelReason.trim()) {
+      showToast('A cancellation explanation reason is mandatory', 'warning');
+      return;
+    }
 
-      const res = await api.post('/activities', payload);
+    try {
+      setCancellingLoading(true);
+      const res = await api.post(`/activities/${cancellingActivity._id}/cancel`, {
+        reason: cancelReason.trim(),
+        sessionId: selectedCancelSessionId || undefined
+      });
+
       if (res.success) {
-        showToast(res.message, 'success');
-        setShowCreateModal(false);
-        setCreateStep(1);
-        fetchMyActivities();
+        showToast(res.message || 'Booking cancelled and slot released successfully', 'success');
+        setCancellingActivity(null);
+        setCancelReason('');
+        setSelectedCancelSessionId('');
+        fetchFacultyData();
       }
     } catch (err) {
-      if (err.isDuplicate) {
-        if (window.confirm(`${err.message}\n\nDo you want to proceed creating this activity anyway?`)) {
-          // Retry with ignoreDuplicateWarning
-          const payload = {
-            title: form.title,
-            category: form.category,
-            description: form.description,
-            date: form.date,
-            startTime: form.startTime,
-            endTime: form.endTime,
-            ignoreDuplicateWarning: true,
-            isDraft
-          };
-          const res = await api.post('/activities', payload);
-          if (res.success) {
-            showToast(res.message, 'success');
-            setShowCreateModal(false);
-            fetchMyActivities();
-          }
-        }
-      } else {
-        showToast(err.message || 'Failed to create activity', 'error');
+      showToast(err.response?.data?.message || err.message || 'Failed to cancel activity', 'error');
+    } finally {
+      setCancellingLoading(false);
+    }
+  };
+
+  // Handle Slot Offer Response (ACCEPT or DECLINE)
+  const handleRespondToOffer = async (offerId, action) => {
+    try {
+      setOfferActionLoading(true);
+      const res = await api.post(`/slots/offers/${offerId}/respond`, { action });
+      if (res.success) {
+        showToast(res.message, 'success');
+        fetchFacultyData();
       }
+    } catch (err) {
+      showToast(err.response?.data?.message || err.message || 'Failed to respond to offer', 'error');
+    } finally {
+      setOfferActionLoading(false);
     }
   };
 
@@ -141,11 +140,6 @@ export const FacultyDashboard = () => {
               </span>
             )}
           </div>
-          {user?.facultyEmployeeId && (
-            <p className="text-[10px] text-slate-400 mt-1">
-              🔒 This Faculty / Employee ID is permanently assigned to your account and cannot be changed.
-            </p>
-          )}
         </div>
 
         <button
@@ -155,6 +149,69 @@ export const FacultyDashboard = () => {
           <Plus className="w-4 h-4" /> Create New Activity
         </button>
       </div>
+
+      {/* ACTIVE SLOT OFFERS BANNER (Enhancement C) */}
+      {slotOffers.length > 0 && (
+        <div className="p-5 rounded-3xl bg-gradient-to-r from-emerald-500/10 via-emerald-600/15 to-emerald-500/10 border-2 border-emerald-500/40 shadow-xl space-y-3">
+          <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
+            <Sparkles className="w-5 h-5 text-emerald-600 animate-pulse" />
+            <h3 className="font-extrabold text-sm uppercase tracking-wider">
+              Smart Slot Reallocation Alert: Released Venue Slot Available!
+            </h3>
+          </div>
+          <p className="text-xs text-slate-600 dark:text-slate-300">
+            A previously booked venue slot has been released and offered to you through the FCFS waiting queue. Please accept to confirm your booking or decline to pass it to the next requester.
+          </p>
+
+          <div className="space-y-2">
+            {slotOffers.map((offer) => (
+              <div
+                key={offer._id}
+                className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+              >
+                <div>
+                  <h4 className="font-extrabold text-xs text-slate-900 dark:text-white">
+                    {offer.activityId?.title || 'Your Queued Activity'}
+                  </h4>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-3 mt-1">
+                    <span className="flex items-center gap-1 font-bold text-emerald-600">
+                      <MapPin className="w-3.5 h-3.5" /> {offer.venueId?.name || 'Assigned Venue'}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" /> {new Date(offer.date).toLocaleDateString()}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" /> {offer.isAllDay ? 'All-Day' : `${offer.startTime} - ${offer.endTime}`}
+                    </span>
+                    <span className="text-rose-500 font-bold text-[10px]">
+                      Expires: {new Date(offer.expiresAt).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 self-end sm:self-center">
+                  <button
+                    type="button"
+                    disabled={offerActionLoading}
+                    onClick={() => handleRespondToOffer(offer._id, 'DECLINE')}
+                    className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-all"
+                  >
+                    Decline
+                  </button>
+                  <button
+                    type="button"
+                    disabled={offerActionLoading}
+                    onClick={() => handleRespondToOffer(offer._id, 'ACCEPT')}
+                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center gap-1"
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Accept & Schedule Slot
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Action Center Widget */}
       <ActionCenter />
@@ -192,7 +249,6 @@ export const FacultyDashboard = () => {
             <Layers className="w-5 h-5 text-rcpit-600" /> My Activity Lifecycle Records
           </h3>
 
-          {/* Activity Section Search Bar */}
           <div className="flex items-center gap-2 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-64">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -229,71 +285,209 @@ export const FacultyDashboard = () => {
                 <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-400 font-extrabold uppercase text-[10px] tracking-wider">
                   <th className="pb-3 px-2">Activity Title</th>
                   <th className="pb-3 px-2">Category</th>
-                  <th className="pb-3 px-2">Date & Venue</th>
+                  <th className="pb-3 px-2">Schedule & Venue</th>
                   <th className="pb-3 px-2">Lifecycle Status</th>
                   <th className="pb-3 px-2">Doc Score</th>
                   <th className="pb-3 px-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredActivities.map((act) => (
-                  <tr key={act._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs truncate">
-                      <Link
-                        to={`/faculty/activities/${act._id}`}
-                        className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block truncate cursor-pointer"
-                        title={act.title}
-                      >
-                        {act.title}
-                      </Link>
-                    </td>
-                    <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
-                      {act.category}
-                    </td>
-                    <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
-                      <div>{new Date(act.date).toLocaleDateString()}</div>
-                      <div className="text-[10px] text-slate-400">{act.venueName || 'TBD'}</div>
-                    </td>
-                    <td className="py-3.5 px-2">
-                      <StatusBadge status={act.status} />
-                    </td>
-                    <td className="py-3.5 px-2 font-bold text-rcpit-600">
-                      {act.documentationScore}%
-                    </td>
-                    <td className="py-3.5 px-2 text-right space-x-1">
-                      <Link
-                        to={`/faculty/activities/${act._id}`}
-                        className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300 inline-flex items-center"
-                        title="View Digital Album & Details"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </Link>
-                      {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) && (
-                        <>
+                {filteredActivities.map((act) => {
+                  const isEligibleForCancellation =
+                    !['COMPLETED', 'ARCHIVED', 'CANCELLED'].includes(act.status);
+
+                  return (
+                    <tr key={act._id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3.5 px-2 font-bold text-slate-900 dark:text-white max-w-xs">
+                        <Link
+                          to={`/faculty/activities/${act._id}`}
+                          className="hover:text-rcpit-600 dark:hover:text-rcpit-400 hover:underline transition-colors block truncate cursor-pointer"
+                          title={act.title}
+                        >
+                          {act.title}
+                        </Link>
+                        {act.rejectionReason && ['REJECTED', 'CHANGES_REQUIRED'].includes(act.status) && (
+                          <span className="text-[10px] text-rose-500 font-semibold block truncate mt-0.5" title={act.rejectionReason}>
+                            ⚠️ Reason: {act.rejectionReason}
+                          </span>
+                        )}
+                        {act.status === 'CANCELLED' && act.cancellationReason && (
+                          <span className="text-[10px] text-slate-400 block truncate mt-0.5" title={act.cancellationReason}>
+                            Cancelled: {act.cancellationReason}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
+                        {act.category}
+                      </td>
+                      <td className="py-3.5 px-2 text-slate-600 dark:text-slate-400">
+                        <div className="flex items-center gap-1.5">
+                          <span>{new Date(act.date).toLocaleDateString()}</span>
+                          {act.isAllDay ? (
+                            <span className="px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[9px] font-black uppercase">
+                              All-Day
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">
+                              ({act.startTime} - {act.endTime})
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {act.venueName || 'TBD'}
+                          {Array.isArray(act.sessions) && act.sessions.length > 1 && (
+                            <span className="text-rcpit-600 font-bold ml-1">
+                              • {act.sessions.length} sessions
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-2">
+                        <StatusBadge status={act.status} />
+                      </td>
+                      <td className="py-3.5 px-2 font-bold text-rcpit-600">
+                        {act.documentationScore}%
+                      </td>
+                      <td className="py-3.5 px-2 text-right space-x-1">
+                        <Link
+                          to={`/faculty/activities/${act._id}`}
+                          className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300 inline-flex items-center"
+                          title="View Details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Link>
+
+                        {/* Cancellation Action for Eligible Bookings (Enhancement C) */}
+                        {isEligibleForCancellation && (
                           <button
-                            onClick={() => setSelectedQrActivity(act)}
-                            className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300"
-                            title="Show Verification QR Code"
+                            onClick={() => {
+                              setCancellingActivity(act);
+                              setCancelReason('');
+                              setSelectedCancelSessionId('');
+                            }}
+                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 dark:text-rose-400 inline-flex items-center transition-colors"
+                            title="Cancel Booking & Release Slot"
                           >
-                            <QrCode className="w-3.5 h-3.5" />
+                            <XCircle className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => setSelectedPdfActivityId(act._id)}
-                            className="p-1.5 rounded-lg bg-rcpit-50 text-rcpit-600 dark:bg-rcpit-950 dark:text-rcpit-400 font-bold"
-                            title="Generate Event PDF Report"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        )}
+
+                        {['ADMIN_APPROVED', 'SCHEDULED', 'COMPLETED', 'ARCHIVED'].includes(act.status) && (
+                          <>
+                            <button
+                              onClick={() => setSelectedQrActivity(act)}
+                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rcpit-50 text-slate-600 dark:text-slate-300 inline-flex items-center"
+                              title="Show Verification QR Code"
+                            >
+                              <QrCode className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setSelectedPdfActivityId(act._id)}
+                              className="p-1.5 rounded-lg bg-rcpit-50 text-rcpit-600 dark:bg-rcpit-950 dark:text-rcpit-400 font-bold inline-flex items-center"
+                              title="Generate Event PDF Report"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* ACTIVITY CANCELLATION MODAL (Enhancement C) */}
+      {cancellingActivity && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <h3 className="font-extrabold text-sm text-rose-600 flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-600" /> Cancel Activity Booking
+              </h3>
+              <button
+                onClick={() => setCancellingActivity(null)}
+                className="p-1 rounded-lg text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="text-xs space-y-2">
+              <p className="font-bold text-slate-900 dark:text-white">
+                Activity: <span className="text-rcpit-600">{cancellingActivity.title}</span>
+              </p>
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 space-y-1">
+                <p><strong>Venue:</strong> {cancellingActivity.venueName || 'Assigned Venue'}</p>
+                <p><strong>Date & Time:</strong> {new Date(cancellingActivity.date).toLocaleDateString()} ({cancellingActivity.isAllDay ? 'All-Day' : `${cancellingActivity.startTime} - ${cancellingActivity.endTime}`})</p>
+              </div>
+
+              {/* Multi-Session Cancellation Selector */}
+              {Array.isArray(cancellingActivity.sessions) && cancellingActivity.sessions.length > 1 && (
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Cancellation Scope:
+                  </label>
+                  <select
+                    value={selectedCancelSessionId}
+                    onChange={(e) => setSelectedCancelSessionId(e.target.value)}
+                    className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none"
+                  >
+                    <option value="">Cancel Entire Activity (All Sessions)</option>
+                    {cancellingActivity.sessions.map((s, idx) => (
+                      <option key={s._id || idx} value={s._id} disabled={s.status === 'CANCELLED'}>
+                        Cancel Session: {s.sessionTitle || `Session ${idx + 1}`} ({new Date(s.date).toLocaleDateString()}) {s.status === 'CANCELLED' ? '[Already Cancelled]' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                <p>
+                  <strong>Notice:</strong> Confirming cancellation will immediately release your reserved venue slot. The slot will be automatically reallocated to the next eligible requester in the FCFS waiting queue.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Cancellation Reason <span className="text-rose-500">*</span>:
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  placeholder="e.g. Guest speaker flight cancelled, event postponed to next academic term..."
+                  className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-rose-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setCancellingActivity(null)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl"
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                disabled={cancellingLoading}
+                onClick={handleConfirmCancellation}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs rounded-xl shadow-md transition-all disabled:opacity-50"
+              >
+                {cancellingLoading ? 'Releasing Slot...' : 'Confirm Cancellation & Release Slot'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* QR & PDF Modals */}
       <QRCodeModal
@@ -307,11 +501,11 @@ export const FacultyDashboard = () => {
         activityId={selectedPdfActivityId}
       />
 
-      {/* Universal Photo & Video Activity Creation Modal */}
+      {/* Activity Creation Modal */}
       <CreateActivityModal
         isOpen={showCreateModal}
         onClose={() => setShowCreateModal(false)}
-        onSuccess={fetchMyActivities}
+        onSuccess={fetchFacultyData}
       />
 
     </div>

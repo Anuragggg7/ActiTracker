@@ -163,7 +163,8 @@ export const buildOfficialActivityPDF = async ({
       rowY += 16;
 
       doc.font('Helvetica-Bold').text('Date & Timings:', 50, rowY);
-      doc.font('Helvetica').text(`${new Date(activity.date).toLocaleDateString('en-IN')} (${activity.startTime} - ${activity.endTime})`, 135, rowY);
+      const timeDisplay = activity.isAllDay ? 'All-Day Event' : `${activity.startTime} - ${activity.endTime}`;
+      doc.font('Helvetica').text(`${new Date(activity.date).toLocaleDateString('en-IN')} (${timeDisplay})`, 135, rowY);
       doc.font('Helvetica-Bold').text('Venue / Slot:', 310, rowY);
       doc.font('Helvetica').text(`${activity.venueName || activity.venueId?.name || 'TBD'}`, 385, rowY);
       rowY += 16;
@@ -181,12 +182,56 @@ export const buildOfficialActivityPDF = async ({
 
       currentY += metaBoxHeight + 12;
 
+      // Cancellation Notice if Cancelled
+      if (activity.status === 'CANCELLED') {
+        ensureSpace(30);
+        doc.rect(40, currentY, 515, 24).fillAndStroke('#fee2e2', '#ef4444');
+        doc.fillColor('#b91c1c').fontSize(8).font('Helvetica-Bold')
+          .text(`[OFFICIALLY CANCELLED] Reason: ${activity.cancellationReason || 'Booking cancelled by faculty coordinator.'}`, 48, currentY + 7);
+        currentY += 32;
+      }
+
       // Description & Objectives
       doc.fillColor(TEXT_DARK).fontSize(8.5).font('Helvetica-Bold').text('Activity Objectives & Academic Scope:', 40, currentY);
       currentY += 12;
       const descText = activity.description || 'Activity conducted to enhance technical acumen, practical exposure and syllabus curriculum reinforcement.';
       doc.font('Helvetica').fontSize(8).fillColor(TEXT_MUTED).text(descText, 40, currentY, { width: 515, lineGap: 2 });
       currentY += doc.heightOfString(descText, { width: 515, lineGap: 2 }) + 14;
+
+      // Multiple Sessions Table if present (Enhancement B)
+      if (Array.isArray(activity.sessions) && activity.sessions.length > 1) {
+        ensureSpace(60);
+        doc.fillColor(PRIMARY).fontSize(9).font('Helvetica-Bold').text('Scheduled Multi-Session Occurrences Breakdown:', 40, currentY);
+        currentY += 12;
+
+        doc.rect(40, currentY, 515, 16).fill(PRIMARY);
+        doc.fillColor('#ffffff').fontSize(7).font('Helvetica-Bold');
+        doc.text('Sr.', 46, currentY + 4);
+        doc.text('Session Name', 68, currentY + 4);
+        doc.text('Date', 195, currentY + 4);
+        doc.text('Timings', 270, currentY + 4);
+        doc.text('Venue', 360, currentY + 4);
+        doc.text('Expected', 440, currentY + 4);
+        doc.text('Status', 490, currentY + 4);
+        currentY += 16;
+
+        activity.sessions.forEach((s, idx) => {
+          ensureSpace(16);
+          const bg = idx % 2 === 0 ? '#ffffff' : BG_CARD;
+          doc.rect(40, currentY, 515, 16).fillAndStroke(bg, BORDER_COLOR);
+          doc.fillColor(TEXT_DARK).fontSize(7).font('Helvetica');
+          doc.text(String(idx + 1), 46, currentY + 4);
+          doc.text(s.sessionTitle || `Session ${idx + 1}`, 68, currentY + 4, { width: 120 });
+          doc.text(new Date(s.date).toLocaleDateString('en-IN'), 195, currentY + 4);
+          doc.text(s.isAllDay ? 'All-Day' : `${s.startTime} - ${s.endTime}`, 270, currentY + 4);
+          doc.text(s.venueName || 'TBD', 360, currentY + 4, { width: 75 });
+          doc.text(String(s.expectedParticipants || 50), 440, currentY + 4);
+          doc.font('Helvetica-Bold').fillColor(s.status === 'CANCELLED' ? '#ef4444' : SUCCESS_COLOR)
+            .text(s.status || 'SCHEDULED', 490, currentY + 4);
+          currentY += 16;
+        });
+        currentY += 14;
+      }
 
       // -------------------------------------------------------------
       // SECTION 2: DEPARTMENT AUTHORITIES & RESOURCE PERSON

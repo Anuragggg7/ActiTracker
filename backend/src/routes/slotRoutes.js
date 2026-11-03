@@ -7,7 +7,12 @@ import {
   getSlotRequests,
   getVenues,
   createVenue,
-  deleteVenue
+  deleteVenue,
+  addToWaitingQueueController,
+  getWaitingQueueController,
+  getActiveSlotOffersController,
+  respondToSlotOfferController,
+  getCancellationHistoryController
 } from '../controllers/slotController.js';
 import { protect, authorize } from '../middleware/authMiddleware.js';
 
@@ -26,5 +31,12 @@ router.get('/requests', getSlotRequests);
 router.post('/requests', createSlotRequest);
 router.put('/requests/:id/review', authorize('ADMIN'), reviewSlotRequest);
 router.put('/review/:id', authorize('ADMIN'), reviewSlotRequest);
+
+// FCFS Waiting Queue & Smart Slot Reallocation (Enhancement C)
+router.get('/waiting-queue', getWaitingQueueController);
+router.post('/waiting-queue', addToWaitingQueueController);
+router.get('/offers', getActiveSlotOffersController);
+router.post('/offers/:id/respond', respondToSlotOfferController);
+router.get('/cancellations', getCancellationHistoryController);
 
 export default router;

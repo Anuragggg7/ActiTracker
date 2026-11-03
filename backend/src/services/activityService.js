@@ -7,29 +7,58 @@ import Media from '../models/Media.js';
 import Document from '../models/Document.js';
 import ActivityReport from '../models/ActivityReport.js';
 import ActivityApproval from '../models/ActivityApproval.js';
+import CancellationHistory from '../models/CancellationHistory.js';
 import { checkForDuplicateActivity } from '../utils/duplicateChecker.js';
 import { calculateCompletenessScore } from '../utils/completenessCalculator.js';
 import { logAudit } from '../utils/auditLogger.js';
-import { validateAndLockVenueBooking, SlotConflictError } from './slotService.js';
+import {
+  validateAndLockVenueBooking,
+  validateVenueCapacity,
+  validateTimeRange,
+  validateSessionsScheduleAndCapacity,
+  processSlotReallocation,
+  toDateString,
+  SlotConflictError
+} from './slotService.js';
 
 // State Machine Transition Rules
 export const ALLOWED_TRANSITIONS = {
-  'DRAFT': ['SUBMITTED'],
-  'SUBMITTED': ['ADMIN_REVIEW', 'HOD_REVIEW', 'HOD_APPROVED', 'REJECTED', 'CHANGES_REQUIRED', 'DRAFT'],
-  'HOD_REVIEW': ['ADMIN_REVIEW', 'REJECTED', 'CHANGES_REQUIRED', 'DRAFT'],
-  'ADMIN_REVIEW': ['ADMIN_APPROVED', 'HOD_APPROVED', 'REJECTED', 'CHANGES_REQUIRED'],
-  'ADMIN_APPROVED': ['SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED'],
-  'HOD_APPROVED': ['ADMIN_REVIEW', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED'],
-  'CHANGES_REQUIRED': ['SUBMITTED', 'DRAFT'],
-  'SLOT_REQUESTED': ['SLOT_APPROVED', 'REJECTED', 'CHANGES_REQUIRED'],
-  'SLOT_APPROVED': ['SCHEDULED', 'CONDUCTED'],
-  'SCHEDULED': ['CONDUCTED', 'REPORT_PENDING'],
+  'DRAFT': ['SUBMITTED', 'CANCELLED'],
+  'SUBMITTED': ['ADMIN_REVIEW', 'HOD_REVIEW', 'HOD_APPROVED', 'REJECTED', 'CHANGES_REQUIRED', 'DRAFT', 'CANCELLED'],
+  'HOD_REVIEW': ['ADMIN_REVIEW', 'REJECTED', 'CHANGES_REQUIRED', 'DRAFT', 'CANCELLED'],
+  'ADMIN_REVIEW': ['ADMIN_APPROVED', 'HOD_APPROVED', 'REJECTED', 'CHANGES_REQUIRED', 'CANCELLED'],
+  'ADMIN_APPROVED': ['SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CONDUCTED', 'CANCELLED'],
+  'HOD_APPROVED': ['ADMIN_REVIEW', 'SLOT_REQUESTED', 'SLOT_APPROVED', 'SCHEDULED', 'CANCELLED'],
+  'CHANGES_REQUIRED': ['SUBMITTED', 'DRAFT', 'CANCELLED'],
+  'SLOT_REQUESTED': ['SLOT_APPROVED', 'REJECTED', 'CHANGES_REQUIRED', 'CANCELLED'],
+  'SLOT_APPROVED': ['SCHEDULED', 'CONDUCTED', 'CANCELLED'],
+  'SCHEDULED': ['CONDUCTED', 'REPORT_PENDING', 'CANCELLED'],
   'CONDUCTED': ['REPORT_PENDING', 'REPORT_SUBMITTED', 'VERIFICATION'],
   'REPORT_PENDING': ['REPORT_SUBMITTED', 'VERIFICATION'],
   'REPORT_SUBMITTED': ['VERIFICATION', 'COMPLETED', 'CHANGES_REQUIRED', 'REJECTED'],
   'VERIFICATION': ['COMPLETED', 'CHANGES_REQUIRED', 'REJECTED'],
   'COMPLETED': ['ARCHIVED'],
-  'REJECTED': ['DRAFT']
+  'REJECTED': ['DRAFT'],
+  'CANCELLED': []
+};
+
+// Enhancement G: Word Count Helper
+export const countWords = (text) => {
+  if (!text || typeof text !== 'string') return 0;
+  return text.trim().split(/\s+/).filter(Boolean).length;
+};
+
+export const validateDescriptionWordCount = (description) => {
+  if (!description) return 0;
+  const wordCount = countWords(description);
+  if (wordCount > 300) {
+    const error = new Error(`Activity description exceeds the 300-word limit (${wordCount} words provided). Please shorten the description to 300 words or less.`);
+    error.statusCode = 400;
+    error.wordCount = wordCount;
+    error.maxWords = 300;
+    throw error;
+  }
+  return wordCount;
 };
 
 /**
@@ -39,10 +68,13 @@ export const createActivityService = async ({ body, user, req }) => {
   const {
     title, category, departmentId, description, objectives,
     targetAudience, guestSpeaker, date, startTime, endTime, durationHours,
-    venueId, venueName, expectedParticipants, studentParticipantsCount,
+    isAllDay, sessions, venueId, venueName, expectedParticipants, studentParticipantsCount,
     facultyParticipantsCount, externalParticipantsCount, estimatedBudget, fundingSource,
     isDraft, ignoreDuplicateWarning
   } = body;
+
+  // Enhancement G: 300-word validation for description
+  validateDescriptionWordCount(description);
 
   const userDeptId = user.departmentId?._id || user.departmentId;
   const deptId = (user.role === 'FACULTY' || user.role === 'HOD') ? userDeptId : (departmentId || userDeptId);
@@ -54,8 +86,10 @@ export const createActivityService = async ({ body, user, req }) => {
     throw error;
   }
 
+  const primaryDate = date ? new Date(date) : new Date();
+
   if (!ignoreDuplicateWarning) {
-    const dupCheck = await checkForDuplicateActivity({ title, departmentId: deptId, date });
+    const dupCheck = await checkForDuplicateActivity({ title, departmentId: deptId, date: primaryDate });
     if (dupCheck.isDuplicate) {
       const error = new Error(dupCheck.message);
       error.statusCode = 409;
@@ -65,15 +99,75 @@ export const createActivityService = async ({ body, user, req }) => {
     }
   }
 
-  if (venueId) {
-    await validateAndLockVenueBooking({
-      venueId,
-      date,
-      startTime,
-      endTime,
+  // Handle Multi-Session or Single-Session Scheduling
+  let validatedSessions = [];
+  let primaryStartTime = startTime || '10:00';
+  let primaryEndTime = endTime || '13:00';
+  let primaryDurationHours = Number(durationHours) || 3;
+  let primaryIsAllDay = !!isAllDay;
+  let primaryVenueId = venueId || null;
+  let primaryVenueName = venueName || 'TBD';
+  const participantsCount = Number(expectedParticipants) || 50;
+
+  if (Array.isArray(sessions) && sessions.length > 0) {
+    // Enhancement B: Multiple sessions validation
+    validatedSessions = await validateSessionsScheduleAndCapacity({
+      sessions,
+      defaultVenueId: venueId,
       reqUser: user,
       req
     });
+
+    if (validatedSessions.length > 0) {
+      const firstSession = validatedSessions[0];
+      primaryStartTime = firstSession.startTime;
+      primaryEndTime = firstSession.endTime;
+      primaryDurationHours = firstSession.durationHours;
+      primaryIsAllDay = firstSession.isAllDay;
+      primaryVenueId = firstSession.venueId || primaryVenueId;
+      primaryVenueName = firstSession.venueName || primaryVenueName;
+    }
+  } else {
+    // Enhancement A & D: Single session validation
+    const timeValidation = validateTimeRange({
+      startTime: primaryStartTime,
+      endTime: primaryEndTime,
+      isAllDay: primaryIsAllDay
+    });
+    primaryStartTime = timeValidation.startTime;
+    primaryEndTime = timeValidation.endTime;
+    primaryDurationHours = timeValidation.durationHours;
+    primaryIsAllDay = timeValidation.isAllDay;
+
+    if (primaryVenueId) {
+      const venueDoc = await validateVenueCapacity(primaryVenueId, participantsCount);
+      if (venueDoc) primaryVenueName = venueDoc.name;
+
+      await validateAndLockVenueBooking({
+        venueId: primaryVenueId,
+        date: primaryDate,
+        startTime: primaryStartTime,
+        endTime: primaryEndTime,
+        isAllDay: primaryIsAllDay,
+        reqUser: user,
+        req
+      });
+    }
+
+    validatedSessions = [
+      {
+        sessionTitle: 'Session 1',
+        date: primaryDate,
+        startTime: primaryStartTime,
+        endTime: primaryEndTime,
+        durationHours: primaryDurationHours,
+        isAllDay: primaryIsAllDay,
+        venueId: primaryVenueId,
+        venueName: primaryVenueName,
+        expectedParticipants: participantsCount,
+        status: 'SCHEDULED'
+      }
+    ];
   }
 
   const status = isDraft ? 'DRAFT' : 'SUBMITTED';
@@ -82,21 +176,23 @@ export const createActivityService = async ({ body, user, req }) => {
     title,
     category,
     departmentId: deptId,
-    description,
-    objectives,
+    description: description.trim(),
+    objectives: objectives || '',
     coordinatorId: user._id,
     hodId: department.hodId?._id || department.hodId,
-    targetAudience,
+    targetAudience: targetAudience || 'Students & Faculty',
     guestSpeaker: guestSpeaker || {},
-    date: new Date(date),
-    startTime,
-    endTime,
-    durationHours: Number(durationHours) || 3,
-    venueId: venueId || null,
-    venueName: venueName || 'TBD',
-    expectedParticipants: Number(expectedParticipants) || 50,
-    studentParticipantsCount: Number(studentParticipantsCount) || 45,
-    facultyParticipantsCount: Number(facultyParticipantsCount) || 5,
+    date: primaryDate,
+    startTime: primaryStartTime,
+    endTime: primaryEndTime,
+    durationHours: primaryDurationHours,
+    isAllDay: primaryIsAllDay,
+    venueId: primaryVenueId,
+    venueName: primaryVenueName,
+    sessions: validatedSessions,
+    expectedParticipants: participantsCount,
+    studentParticipantsCount: Number(studentParticipantsCount) || Math.round(participantsCount * 0.9),
+    facultyParticipantsCount: Number(facultyParticipantsCount) || Math.round(participantsCount * 0.1),
     externalParticipantsCount: Number(externalParticipantsCount) || 0,
     estimatedBudget: Number(estimatedBudget) || 0,
     fundingSource: fundingSource || 'Departmental Budget',
@@ -108,7 +204,6 @@ export const createActivityService = async ({ body, user, req }) => {
   await activity.save();
 
   if (status === 'SUBMITTED') {
-    // Record creation in ActivityApproval
     await ActivityApproval.create({
       activityId: activity._id,
       action: 'SUBMITTED',
@@ -139,7 +234,7 @@ export const createActivityService = async ({ body, user, req }) => {
     entity: 'Activity',
     entityId: activity._id,
     departmentName: department.name,
-    details: `Title: ${title}`
+    details: `Title: ${title}, Sessions: ${validatedSessions.length}`
   });
 
   return activity;
@@ -149,7 +244,7 @@ export const createActivityService = async ({ body, user, req }) => {
  * Service: Get Activities with Role-Based Isolation
  */
 export const getActivitiesService = async ({ query, user }) => {
-  const { status, category, departmentId, search, isUpcoming, isCompleted } = query;
+  const { status, category, departmentId, search, isUpcoming, isCompleted, priority } = query;
   const filter = {};
 
   const userDeptId = user.departmentId?._id || user.departmentId;
@@ -170,6 +265,7 @@ export const getActivitiesService = async ({ query, user }) => {
 
   if (status) filter.status = status;
   if (category) filter.category = category;
+  if (priority && priority !== 'ALL') filter.hodPriority = priority;
   if (departmentId && ['ADMIN', 'DIRECTOR'].includes(user.role)) {
     filter.departmentId = departmentId;
   }
@@ -190,6 +286,7 @@ export const getActivitiesService = async ({ query, user }) => {
     .populate('hodForwardedBy', 'name email designation')
     .populate('adminDecisionBy', 'name email designation')
     .populate('venueId', 'name code location capacity')
+    .populate('sessions.venueId', 'name code location capacity')
     .sort({ date: -1 });
 
   return activities;
@@ -205,7 +302,8 @@ export const getActivityByIdService = async ({ id, user }) => {
     .populate('hodId', 'name email designation')
     .populate('hodForwardedBy', 'name email designation')
     .populate('adminDecisionBy', 'name email designation')
-    .populate('venueId');
+    .populate('venueId')
+    .populate('sessions.venueId');
 
   if (!activity) {
     const error = new Error('Activity not found');
@@ -228,6 +326,7 @@ export const getActivityByIdService = async ({ id, user }) => {
   const slotRequest = await SlotRequest.findOne({ activityId: activity._id }).populate('venueId reviewedBy');
   const report = await ActivityReport.findOne({ activityId: activity._id }).populate('submittedBy reviewedBy');
   const approvals = await ActivityApproval.find({ activityId: activity._id }).populate('performedBy', 'name role email designation').sort({ createdAt: -1 });
+  const cancellationHistory = await CancellationHistory.find({ activityId: activity._id }).populate('cancelledBy', 'name role designation').sort({ cancelledAt: -1 });
 
   const score = await calculateCompletenessScore(activity._id);
 
@@ -238,6 +337,7 @@ export const getActivityByIdService = async ({ id, user }) => {
     slotRequest,
     report,
     approvals,
+    cancellationHistory,
     completeness: { score }
   };
 };
@@ -254,6 +354,7 @@ export const getPendingHodActivitiesService = async ({ user }) => {
     .populate('departmentId', 'name code')
     .populate('coordinatorId', 'name email designation employeeId')
     .populate('venueId', 'name code location capacity')
+    .populate('sessions.venueId', 'name code location capacity')
     .sort({ createdAt: -1 });
 
   return activities;
@@ -276,19 +377,20 @@ export const getForwardedHodActivitiesService = async ({ user }) => {
     .populate('hodForwardedBy', 'name email designation')
     .populate('adminDecisionBy', 'name email designation')
     .populate('venueId', 'name code location capacity')
+    .populate('sessions.venueId', 'name code location capacity')
     .sort({ updatedAt: -1 });
 
   return activities;
 };
 
 /**
- * Service: HOD Review & Forward Activity
+ * Service: HOD Review & Forward Activity (Enhancements E & F)
  * Actions:
- * - 'FORWARD' (or 'APPROVE' mapped to forward for backward compatibility): Forwards to Admin for final approval
+ * - 'FORWARD': Forwards to Admin with recommended priority & reason
  * - 'REQUEST_CHANGES': Requests modifications with mandatory notes
- * - 'REJECT': Rejects proposal with mandatory notes
+ * - 'REJECT': Rejects proposal with mandatory rejection reason stored in MongoDB
  */
-export const hodReviewActivityService = async ({ id, action, notes, user, req }) => {
+export const hodReviewActivityService = async ({ id, action, notes, priority = 'NORMAL', priorityReason = '', user, req }) => {
   const activity = await Activity.findById(id).populate('coordinatorId departmentId');
   if (!activity) {
     const error = new Error('Activity not found');
@@ -313,7 +415,14 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
     activity.hodForwardedAt = new Date();
     activity.hodForwardedBy = user._id;
 
-    // Record ActivityApproval
+    // Enhancement E: HOD Priority Recommendation
+    const validPriorities = ['HIGH', 'MEDIUM', 'NORMAL'];
+    const chosenPriority = validPriorities.includes(priority) ? priority : 'NORMAL';
+    activity.hodPriority = chosenPriority;
+    activity.hodPriorityReason = (priorityReason || notes || '').trim();
+    activity.hodPriorityAssignedAt = new Date();
+    activity.hodPriorityAssignedBy = user._id;
+
     await ActivityApproval.create({
       activityId: activity._id,
       action: 'FORWARDED_TO_ADMIN',
@@ -321,7 +430,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       role: user.role,
       previousStatus,
       newStatus: 'ADMIN_REVIEW',
-      comments: notes || 'Reviewed and forwarded to Admin'
+      comments: `Forwarded to Admin with recommended priority: ${chosenPriority}. Reason: ${activity.hodPriorityReason}`
     });
 
     // Notify Admins
@@ -330,10 +439,10 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       await Notification.createIdempotent({
         recipientId: admin._id,
         senderId: user._id,
-        title: 'Activity Proposal Forwarded for Approval',
-        message: `${user.name} (HOD ${activity.departmentId?.code || ''}) forwarded activity "${activity.title}" for final approval.`,
+        title: `Activity Forwarded [${chosenPriority} Priority]`,
+        message: `${user.name} (HOD ${activity.departmentId?.code || ''}) forwarded "${activity.title}" with ${chosenPriority} priority recommendation.`,
         category: 'Approval',
-        priority: 'HIGH',
+        priority: chosenPriority === 'HIGH' ? 'HIGH' : 'MEDIUM',
         link: '/admin'
       });
     }
@@ -345,7 +454,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
         recipientId: coordRecipientId,
         senderId: user._id,
         title: 'Activity Forwarded to Admin',
-        message: `Your activity proposal "${activity.title}" was reviewed by HOD ${user.name} and forwarded to Admin for final approval.`,
+        message: `Your activity proposal "${activity.title}" was reviewed by HOD ${user.name} and forwarded to Admin for final approval (Recommended Priority: ${chosenPriority}).`,
         category: 'Approval',
         priority: 'MEDIUM',
         link: `/activities/${activity._id}`
@@ -360,15 +469,16 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       entity: 'Activity',
       entityId: activity._id,
       departmentName: activity.departmentId?.name,
-      details: notes || 'Proposal forwarded to Admin for final institutional approval'
+      details: `Priority: ${chosenPriority}, Reason: ${activity.hodPriorityReason}`
     });
 
     return {
       success: true,
-      message: 'Activity proposal reviewed and forwarded to Admin for final approval',
+      message: `Activity proposal reviewed and forwarded to Admin with ${chosenPriority} priority recommendation.`,
       activity
     };
   } else if (action === 'REJECT') {
+    // Enhancement F: Mandatory Rejection Reason
     if (!notes || !notes.trim()) {
       const error = new Error('Rejection requires a mandatory explanation notes/reason');
       error.statusCode = 400;
@@ -376,8 +486,19 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
     }
 
     activity.status = 'REJECTED';
-    activity.rejectionReason = notes;
-    activity.hodReviewNotes = notes;
+    activity.rejectionReason = notes.trim();
+    activity.hodReviewNotes = notes.trim();
+    activity.rejectedBy = user._id;
+    activity.rejectedAt = new Date();
+    activity.rejectedRole = 'HOD';
+
+    // Store immutable rejection history
+    activity.rejectionHistory.push({
+      reason: notes.trim(),
+      rejectedBy: user._id,
+      role: 'HOD',
+      rejectedAt: new Date()
+    });
 
     await ActivityApproval.create({
       activityId: activity._id,
@@ -386,7 +507,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       role: user.role,
       previousStatus,
       newStatus: 'REJECTED',
-      comments: notes
+      comments: notes.trim()
     });
 
     const rejectCoordId = activity.coordinatorId?._id || activity.coordinatorId;
@@ -395,7 +516,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
         recipientId: rejectCoordId,
         senderId: user._id,
         title: 'Activity Proposal Rejected by HOD',
-        message: `Your activity proposal "${activity.title}" was rejected by HOD. Reason: ${notes}`,
+        message: `Your activity proposal "${activity.title}" was rejected by HOD. Reason: ${notes.trim()}`,
         category: 'Approval',
         priority: 'HIGH',
         link: `/activities/${activity._id}`
@@ -410,7 +531,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       entity: 'Activity',
       entityId: activity._id,
       departmentName: activity.departmentId?.name,
-      details: `Rejection reason: ${notes}`
+      details: `Rejection reason: ${notes.trim()}`
     });
 
     return {
@@ -426,7 +547,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
     }
 
     activity.status = 'CHANGES_REQUIRED';
-    activity.hodReviewNotes = notes;
+    activity.hodReviewNotes = notes.trim();
 
     await ActivityApproval.create({
       activityId: activity._id,
@@ -435,7 +556,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       role: user.role,
       previousStatus,
       newStatus: 'CHANGES_REQUIRED',
-      comments: notes
+      comments: notes.trim()
     });
 
     const changeCoordId = activity.coordinatorId?._id || activity.coordinatorId;
@@ -444,7 +565,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
         recipientId: changeCoordId,
         senderId: user._id,
         title: 'Activity Changes Requested by HOD',
-        message: `HOD requested modifications for "${activity.title}". Notes: ${notes}`,
+        message: `HOD requested modifications for "${activity.title}". Notes: ${notes.trim()}`,
         category: 'Approval',
         priority: 'HIGH',
         link: `/activities/${activity._id}`
@@ -459,7 +580,7 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       entity: 'Activity',
       entityId: activity._id,
       departmentName: activity.departmentId?.name,
-      details: `Changes requested: ${notes}`
+      details: `Changes requested: ${notes.trim()}`
     });
 
     return {
@@ -468,13 +589,66 @@ export const hodReviewActivityService = async ({ id, action, notes, user, req })
       activity
     };
   } else if (action === 'APPROVE' && user.role === 'ADMIN') {
-    // If Admin calls review endpoint with action APPROVE, delegate to admin approval
     return await adminApproveActivityService({ id, notes, user, req });
   } else {
     const error = new Error(`Unsupported review action: ${action}`);
     error.statusCode = 400;
     throw error;
   }
+};
+
+/**
+ * Service: Update HOD Priority Recommendation
+ */
+export const updateHodPriorityService = async ({ id, priority, priorityReason = '', user, req }) => {
+  const activity = await Activity.findById(id).populate('departmentId');
+  if (!activity) {
+    const error = new Error('Activity not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  const userDeptId = (user.departmentId?._id || user.departmentId)?.toString();
+  const actDeptId = (activity.departmentId?._id || activity.departmentId)?.toString();
+
+  if (user.role === 'HOD' && userDeptId !== actDeptId) {
+    const error = new Error('Unauthorized: Cannot assign priority to activities of another department.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const validPriorities = ['HIGH', 'MEDIUM', 'NORMAL'];
+  if (!validPriorities.includes(priority)) {
+    const error = new Error(`Invalid priority: ${priority}. Must be HIGH, MEDIUM, or NORMAL.`);
+    error.statusCode = 400;
+    throw error;
+  }
+
+  activity.hodPriority = priority;
+  activity.hodPriorityReason = priorityReason.trim();
+  activity.hodPriorityAssignedAt = new Date();
+  activity.hodPriorityAssignedBy = user._id;
+
+  await ActivityApproval.create({
+    activityId: activity._id,
+    action: 'PRIORITY_RECOMMENDED',
+    performedBy: user._id,
+    role: user.role,
+    comments: `HOD updated priority recommendation to ${priority}. Reason: ${priorityReason.trim()}`
+  });
+
+  await activity.save();
+
+  await logAudit({
+    req,
+    user,
+    action: 'HOD_PRIORITY_UPDATED',
+    entity: 'Activity',
+    entityId: activity._id,
+    details: `Priority: ${priority}, Reason: ${priorityReason.trim()}`
+  });
+
+  return activity;
 };
 
 /**
@@ -487,13 +661,14 @@ export const getPendingAdminActivitiesService = async ({ user, query = {} }) => 
     throw error;
   }
 
-  const { departmentId, category, search, status } = query;
+  const { departmentId, category, search, status, priority } = query;
   const filter = {
     status: status || 'ADMIN_REVIEW'
   };
 
   if (departmentId) filter.departmentId = departmentId;
   if (category) filter.category = category;
+  if (priority && priority !== 'ALL') filter.hodPriority = priority;
   if (search) filter.title = { $regex: search, $options: 'i' };
 
   const activities = await Activity.find(filter)
@@ -503,6 +678,7 @@ export const getPendingAdminActivitiesService = async ({ user, query = {} }) => 
     .populate('hodForwardedBy', 'name email designation')
     .populate('adminDecisionBy', 'name email designation')
     .populate('venueId', 'name code location capacity')
+    .populate('sessions.venueId', 'name code location capacity')
     .sort({ hodForwardedAt: -1, createdAt: -1 });
 
   return activities;
@@ -532,13 +708,22 @@ export const adminApproveActivityService = async ({ id, notes, user, req }) => {
     throw error;
   }
 
-  // Preserve FCFS venue and slot-conflict validation if venue is specified
-  if (activity.venueId) {
+  // Preserve FCFS venue and slot-conflict validation
+  if (Array.isArray(activity.sessions) && activity.sessions.length > 0) {
+    await validateSessionsScheduleAndCapacity({
+      sessions: activity.sessions,
+      defaultVenueId: activity.venueId?._id || activity.venueId,
+      excludeActivityId: activity._id,
+      reqUser: user,
+      req
+    });
+  } else if (activity.venueId) {
     await validateAndLockVenueBooking({
       venueId: activity.venueId._id || activity.venueId,
       date: activity.date,
       startTime: activity.startTime,
       endTime: activity.endTime,
+      isAllDay: activity.isAllDay,
       excludeActivityId: activity._id,
       reqUser: user,
       req
@@ -607,7 +792,7 @@ export const adminApproveActivityService = async ({ id, notes, user, req }) => {
 };
 
 /**
- * Service: Admin Rejection of Activity Proposal
+ * Service: Admin Rejection of Activity Proposal (Enhancement F)
  */
 export const adminRejectActivityService = async ({ id, reason, user, req }) => {
   if (user.role !== 'ADMIN') {
@@ -631,10 +816,21 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
 
   const previousStatus = activity.status;
   activity.status = 'REJECTED';
-  activity.rejectionReason = reason;
-  activity.adminReviewNotes = reason;
+  activity.rejectionReason = reason.trim();
+  activity.adminReviewNotes = reason.trim();
   activity.adminDecisionAt = new Date();
   activity.adminDecisionBy = user._id;
+  activity.rejectedBy = user._id;
+  activity.rejectedAt = new Date();
+  activity.rejectedRole = 'ADMIN';
+
+  // Store immutable rejection history
+  activity.rejectionHistory.push({
+    reason: reason.trim(),
+    rejectedBy: user._id,
+    role: 'ADMIN',
+    rejectedAt: new Date()
+  });
 
   await ActivityApproval.create({
     activityId: activity._id,
@@ -643,7 +839,7 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
     role: 'ADMIN',
     previousStatus,
     newStatus: 'REJECTED',
-    comments: reason
+    comments: reason.trim()
   });
 
   await activity.save();
@@ -655,7 +851,7 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
       recipientId: adminRejectCoordId,
       senderId: user._id,
       title: 'Activity Proposal Rejected by Admin',
-      message: `Your activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason}`,
+      message: `Your activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason.trim()}`,
       category: 'Approval',
       priority: 'HIGH',
       link: `/activities/${activity._id}`
@@ -669,7 +865,7 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
       recipientId: hodRecipientId,
       senderId: user._id,
       title: 'Department Activity Rejected by Admin',
-      message: `The activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason}`,
+      message: `The activity proposal "${activity.title}" was rejected by Admin. Reason: ${reason.trim()}`,
       category: 'Approval',
       priority: 'MEDIUM',
       link: `/activities/${activity._id}`
@@ -683,7 +879,7 @@ export const adminRejectActivityService = async ({ id, reason, user, req }) => {
     entity: 'Activity',
     entityId: activity._id,
     departmentName: activity.departmentId?.name,
-    details: `Rejection reason: ${reason}`
+    details: `Rejection reason: ${reason.trim()}`
   });
 
   return {
@@ -718,7 +914,7 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
 
   const previousStatus = activity.status;
   activity.status = 'CHANGES_REQUIRED';
-  activity.adminReviewNotes = notes;
+  activity.adminReviewNotes = notes.trim();
   activity.adminDecisionAt = new Date();
   activity.adminDecisionBy = user._id;
 
@@ -729,7 +925,7 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
     role: 'ADMIN',
     previousStatus,
     newStatus: 'CHANGES_REQUIRED',
-    comments: notes
+    comments: notes.trim()
   });
 
   await activity.save();
@@ -741,7 +937,7 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
       recipientId: adminChangeCoordId,
       senderId: user._id,
       title: 'Corrections Requested by Admin',
-      message: `Admin requested changes for "${activity.title}". Notes: ${notes}`,
+      message: `Admin requested changes for "${activity.title}". Notes: ${notes.trim()}`,
       category: 'Approval',
       priority: 'HIGH',
       link: `/activities/${activity._id}`
@@ -755,7 +951,7 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
       recipientId: hodRecipientId,
       senderId: user._id,
       title: 'Admin Requested Changes for Activity',
-      message: `Admin requested changes for "${activity.title}". Notes: ${notes}`,
+      message: `Admin requested changes for "${activity.title}". Notes: ${notes.trim()}`,
       category: 'Approval',
       priority: 'MEDIUM',
       link: `/activities/${activity._id}`
@@ -769,13 +965,220 @@ export const adminRequestChangesActivityService = async ({ id, notes, user, req 
     entity: 'Activity',
     entityId: activity._id,
     departmentName: activity.departmentId?.name,
-    details: `Requested changes: ${notes}`
+    details: `Requested changes: ${notes.trim()}`
   });
 
   return {
     success: true,
     message: 'Returned activity proposal for corrections',
     activity
+  };
+};
+
+/**
+ * Service: Activity Booking Cancellation (Enhancement C)
+ * Releases slot immediately and triggers smart reallocation to next eligible FCFS waiting request
+ */
+export const cancelActivityService = async ({ id, sessionId = null, reason, user, req }) => {
+  const activity = await Activity.findById(id).populate('coordinatorId departmentId venueId');
+  if (!activity) {
+    const error = new Error('Activity not found');
+    error.statusCode = 404;
+    throw error;
+  }
+
+  // Ownership Check: Coordinator or Admin
+  const coordId = activity.coordinatorId?._id?.toString() || activity.coordinatorId?.toString();
+  const isCoordinator = coordId === user._id?.toString();
+  if (!isCoordinator && user.role !== 'ADMIN') {
+    const error = new Error('Unauthorized: You can only cancel activities you coordinate, or contact Admin.');
+    error.statusCode = 403;
+    throw error;
+  }
+
+  // Mandatory Reason Check
+  if (!reason || !reason.trim()) {
+    const error = new Error('A cancellation reason is strictly mandatory to release the reserved slot.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (activity.status === 'CANCELLED' && !sessionId) {
+    const error = new Error('This activity has already been cancelled.');
+    error.statusCode = 400;
+    throw error;
+  }
+  if (['COMPLETED', 'ARCHIVED'].includes(activity.status)) {
+    const error = new Error('Cannot cancel an activity that has already been completed and archived.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  // Last-minute cancellation check (allow up to 5 minutes before event start)
+  let targetDate = activity.date;
+  let targetStartTime = activity.startTime;
+
+  if (sessionId && Array.isArray(activity.sessions)) {
+    const targetSession = activity.sessions.id(sessionId);
+    if (targetSession) {
+      targetDate = targetSession.date;
+      targetStartTime = targetSession.startTime;
+    }
+  }
+
+  const eventStart = new Date(targetDate);
+  if (targetStartTime) {
+    const [h, m] = targetStartTime.split(':').map(Number);
+    eventStart.setHours(h || 0, m || 0, 0, 0);
+  }
+
+  const now = new Date();
+  if (eventStart.getTime() < now.getTime() && user.role !== 'ADMIN') {
+    const error = new Error('Cannot cancel an activity that has already started or concluded.');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let releasedVenueId = activity.venueId?._id || activity.venueId;
+  let releasedVenueName = activity.venueName || 'Assigned Venue';
+  let releasedDate = activity.date;
+  let releasedStartTime = activity.startTime;
+  let releasedEndTime = activity.endTime;
+  let releasedIsAllDay = !!activity.isAllDay;
+
+  // Single Session vs Multi-Session cancellation
+  if (sessionId && Array.isArray(activity.sessions) && activity.sessions.length > 0) {
+    const session = activity.sessions.id(sessionId);
+    if (!session) {
+      const error = new Error('Specified activity session not found');
+      error.statusCode = 404;
+      throw error;
+    }
+    if (session.status === 'CANCELLED') {
+      const error = new Error('This session has already been cancelled.');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    session.status = 'CANCELLED';
+    session.cancellationReason = reason.trim();
+    session.cancelledAt = new Date();
+    session.cancelledBy = user._id;
+
+    releasedVenueId = session.venueId || releasedVenueId;
+    releasedVenueName = session.venueName || releasedVenueName;
+    releasedDate = session.date;
+    releasedStartTime = session.startTime;
+    releasedEndTime = session.endTime;
+    releasedIsAllDay = !!session.isAllDay;
+
+    // If all sessions cancelled, mark entire activity cancelled
+    const activeSessions = activity.sessions.filter(s => s.status !== 'CANCELLED');
+    if (activeSessions.length === 0) {
+      activity.status = 'CANCELLED';
+      activity.cancellationReason = reason.trim();
+      activity.cancelledAt = new Date();
+      activity.cancelledBy = user._id;
+    }
+  } else {
+    // Entire activity cancellation
+    activity.status = 'CANCELLED';
+    activity.cancellationReason = reason.trim();
+    activity.cancelledAt = new Date();
+    activity.cancelledBy = user._id;
+
+    if (Array.isArray(activity.sessions)) {
+      activity.sessions.forEach(sess => {
+        sess.status = 'CANCELLED';
+        sess.cancellationReason = reason.trim();
+        sess.cancelledAt = new Date();
+        sess.cancelledBy = user._id;
+      });
+    }
+
+    // Cancel associated slot requests
+    await SlotRequest.updateMany(
+      { activityId: activity._id, status: { $in: ['PENDING', 'APPROVED', 'SLOT_APPROVED'] } },
+      { status: 'CANCELLED', rejectionReason: `Activity cancelled: ${reason.trim()}` }
+    );
+  }
+
+  await activity.save();
+
+  // Create immutable CancellationHistory record
+  const cancellationRecord = await CancellationHistory.create({
+    activityId: activity._id,
+    sessionId: sessionId || null,
+    activityTitle: activity.title,
+    venueId: releasedVenueId,
+    venueName: releasedVenueName,
+    date: releasedDate,
+    startTime: releasedStartTime,
+    endTime: releasedEndTime,
+    isAllDay: releasedIsAllDay,
+    cancelledBy: user._id,
+    cancellerRole: user.role,
+    cancellerName: user.name,
+    cancellationReason: reason.trim(),
+    cancelledAt: new Date(),
+    reallocationStatus: 'NO_ELIGIBLE_REQUEST'
+  });
+
+  // Record ActivityApproval
+  await ActivityApproval.create({
+    activityId: activity._id,
+    action: 'CANCELLED',
+    performedBy: user._id,
+    role: user.role,
+    previousStatus: activity.status,
+    newStatus: 'CANCELLED',
+    comments: `Booking cancelled by ${user.name} (${user.role}). Reason: ${reason.trim()}. Released slot: ${releasedVenueName} on ${toDateString(releasedDate)} (${releasedStartTime} - ${releasedEndTime})`
+  });
+
+  // Notify Requester
+  await Notification.createIdempotent({
+    recipientId: user._id,
+    title: 'Activity Booking Cancelled',
+    message: `Your booking for "${activity.title}" at ${releasedVenueName} has been cancelled. Reserved venue slot was released.`,
+    category: 'Activity',
+    priority: 'MEDIUM',
+    link: `/activities/${activity._id}`
+  });
+
+  // Audit Log
+  await logAudit({
+    req,
+    user,
+    action: 'ACTIVITY_CANCELLED',
+    entity: 'Activity',
+    entityId: activity._id,
+    details: `Activity "${activity.title}" cancelled. Slot released: ${releasedVenueName} (${releasedStartTime} - ${releasedEndTime}). Reason: ${reason.trim()}`
+  });
+
+  // TRIGGER SMART SLOT REALLOCATION FOR THE RELEASED SLOT
+  let reallocationOffer = null;
+  if (releasedVenueId) {
+    try {
+      reallocationOffer = await processSlotReallocation({
+        venueId: releasedVenueId,
+        date: releasedDate,
+        startTime: releasedStartTime,
+        endTime: releasedEndTime,
+        isAllDay: releasedIsAllDay,
+        cancellationHistoryId: cancellationRecord._id,
+        req
+      });
+    } catch (reallocErr) {
+      console.error('[Slot Reallocation Error]', reallocErr);
+    }
+  }
+
+  return {
+    success: true,
+    message: 'Activity booking cancelled successfully and reserved venue slot released.',
+    activity,
+    cancellationRecord,
+    reallocated: !!reallocationOffer
   };
 };
 
@@ -790,14 +1193,12 @@ export const updateActivityStatusService = async ({ id, newStatus, notes, user, 
     throw error;
   }
 
-  // Lock check
   if (activity.isLocked && user.role !== 'ADMIN') {
     const error = new Error('Historical Record Locked: This activity is officially completed and locked against modifications. Contact Admin to request edits.');
     error.statusCode = 403;
     throw error;
   }
 
-  // Role-level status update security
   if (user.role === 'FACULTY' && ['ADMIN_REVIEW', 'ADMIN_APPROVED', 'HOD_APPROVED', 'VERIFIED', 'COMPLETED', 'ARCHIVED'].includes(newStatus)) {
     const error = new Error('Faculty cannot directly set status to ADMIN_REVIEW, ADMIN_APPROVED, HOD_APPROVED, VERIFIED, or COMPLETED.');
     error.statusCode = 403;
@@ -810,7 +1211,6 @@ export const updateActivityStatusService = async ({ id, newStatus, notes, user, 
     throw error;
   }
 
-  // Validate State Transition Machine
   const allowedNextStatuses = ALLOWED_TRANSITIONS[activity.status] || [];
   if (!allowedNextStatuses.includes(newStatus) && user.role !== 'ADMIN') {
     const error = new Error(`Invalid status transition from '${activity.status}' to '${newStatus}'. Allowed transitions: ${allowedNextStatuses.join(', ')}`);
@@ -880,30 +1280,49 @@ export const updateActivityService = async ({ id, body, user, req }) => {
 
   const {
     title, category, description, objectives, targetAudience, guestSpeaker,
-    date, startTime, endTime, durationHours, venueId, venueName,
+    date, startTime, endTime, durationHours, isAllDay, sessions, venueId, venueName,
     expectedParticipants, estimatedBudget, fundingSource
   } = body;
+
+  if (description) {
+    validateDescriptionWordCount(description);
+  }
 
   const newVenueId = venueId !== undefined ? venueId : activity.venueId;
   const newDate = date ? new Date(date) : activity.date;
   const newStartTime = startTime || activity.startTime;
   const newEndTime = endTime || activity.endTime;
+  const newIsAllDay = isAllDay !== undefined ? !!isAllDay : !!activity.isAllDay;
+  const newExpected = expectedParticipants !== undefined ? Number(expectedParticipants) : activity.expectedParticipants;
 
   if (newVenueId) {
+    await validateVenueCapacity(newVenueId, newExpected);
     await validateAndLockVenueBooking({
       venueId: newVenueId,
       date: newDate,
       startTime: newStartTime,
       endTime: newEndTime,
+      isAllDay: newIsAllDay,
       excludeActivityId: activity._id,
       reqUser: user,
       req
     });
   }
 
+  if (Array.isArray(sessions) && sessions.length > 0) {
+    const validatedSessions = await validateSessionsScheduleAndCapacity({
+      sessions,
+      defaultVenueId: newVenueId,
+      excludeActivityId: activity._id,
+      reqUser: user,
+      req
+    });
+    activity.sessions = validatedSessions;
+  }
+
   if (title) activity.title = title;
   if (category) activity.category = category;
-  if (description) activity.description = description;
+  if (description) activity.description = description.trim();
   if (objectives !== undefined) activity.objectives = objectives;
   if (targetAudience) activity.targetAudience = targetAudience;
   if (guestSpeaker) activity.guestSpeaker = guestSpeaker;
@@ -911,9 +1330,10 @@ export const updateActivityService = async ({ id, body, user, req }) => {
   if (startTime) activity.startTime = newStartTime;
   if (endTime) activity.endTime = newEndTime;
   if (durationHours) activity.durationHours = Number(durationHours);
+  if (isAllDay !== undefined) activity.isAllDay = newIsAllDay;
   if (venueId !== undefined) activity.venueId = venueId;
   if (venueName !== undefined) activity.venueName = venueName;
-  if (expectedParticipants !== undefined) activity.expectedParticipants = Number(expectedParticipants);
+  if (expectedParticipants !== undefined) activity.expectedParticipants = newExpected;
   if (estimatedBudget !== undefined) activity.estimatedBudget = Number(estimatedBudget);
   if (fundingSource) activity.fundingSource = fundingSource;
 

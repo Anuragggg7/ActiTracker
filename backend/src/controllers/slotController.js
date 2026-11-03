@@ -6,13 +6,18 @@ import {
   getVenueScheduleService,
   createSlotRequestService,
   reviewSlotRequestService,
+  addToWaitingQueueService,
+  getWaitingQueueService,
+  getActiveSlotOffersService,
+  respondToSlotOfferService,
+  getCancellationHistoryService,
   SlotConflictError
 } from '../services/slotService.js';
 
 // GET /api/slots/availability
 export const checkAvailabilityController = async (req, res) => {
   try {
-    const { venueId, date, requestedDate, startTime, endTime, excludeActivityId, excludeSlotRequestId } = req.query;
+    const { venueId, date, requestedDate, startTime, endTime, isAllDay, excludeActivityId, excludeSlotRequestId } = req.query;
     const targetDate = date || requestedDate;
 
     const result = await checkSlotAvailability({
@@ -20,6 +25,7 @@ export const checkAvailabilityController = async (req, res) => {
       requestedDate: targetDate,
       startTime,
       endTime,
+      isAllDay: isAllDay === 'true',
       excludeActivityId,
       excludeSlotRequestId
     });
@@ -61,7 +67,7 @@ export const getVenueScheduleController = async (req, res) => {
 // POST /api/slots/requests - Create Slot Request with Atomic FCFS
 export const createSlotRequest = async (req, res) => {
   try {
-    const { activityId, venueId, requestedDate, date, startTime, endTime } = req.body;
+    const { activityId, venueId, requestedDate, date, startTime, endTime, isAllDay } = req.body;
     const targetDate = requestedDate || date;
 
     const slotReq = await createSlotRequestService({
@@ -70,6 +76,7 @@ export const createSlotRequest = async (req, res) => {
       requestedDate: targetDate,
       startTime,
       endTime,
+      isAllDay: !!isAllDay,
       reqUser: req.user,
       req
     });
@@ -89,7 +96,14 @@ export const createSlotRequest = async (req, res) => {
         alternativeSlots: error.alternativeSlots
       });
     }
-    res.status(500).json({ success: false, message: error.message });
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+      venueCapacityExceeded: error.venueCapacityExceeded || false,
+      configuredCapacity: error.configuredCapacity,
+      requestedCount: error.requestedCount,
+      alternativeVenues: error.alternativeVenues || []
+    });
   }
 };
 
@@ -143,6 +157,103 @@ export const getSlotRequests = async (req, res) => {
       .sort({ createdAt: -1 });
 
     res.json({ success: true, count: slotRequests.length, requests: slotRequests, slotRequests });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ============================================================================
+// ENHANCEMENT C: FCFS WAITING QUEUE & SMART REALLOCATION CONTROLLERS
+// ============================================================================
+
+// POST /api/slots/waiting-queue
+export const addToWaitingQueueController = async (req, res) => {
+  try {
+    const { activityId, sessionId, venueId, date, startTime, endTime, isAllDay, notes } = req.body;
+
+    const entry = await addToWaitingQueueService({
+      activityId,
+      sessionId,
+      venueId,
+      date,
+      startTime,
+      endTime,
+      isAllDay: !!isAllDay,
+      notes,
+      user: req.user,
+      req
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Request added to FCFS waiting queue. You will be notified automatically if this slot becomes available.',
+      waitingQueueEntry: entry
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/slots/waiting-queue
+export const getWaitingQueueController = async (req, res) => {
+  try {
+    const { venueId, activityId } = req.query;
+
+    const entries = await getWaitingQueueService({
+      venueId,
+      activityId,
+      user: req.user
+    });
+
+    res.json({ success: true, count: entries.length, waitingQueue: entries });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/slots/offers - Get Active Slot Offers for Requester or Admin
+export const getActiveSlotOffersController = async (req, res) => {
+  try {
+    const offers = await getActiveSlotOffersService({ user: req.user });
+    res.json({ success: true, count: offers.length, offers });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// POST /api/slots/offers/:id/respond - Respond to Slot Offer (ACCEPT or DECLINE)
+export const respondToSlotOfferController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, responseNotes } = req.body;
+
+    const result = await respondToSlotOfferService({
+      offerId: id,
+      action,
+      responseNotes,
+      user: req.user,
+      req
+    });
+
+    res.json(result);
+  } catch (error) {
+    if (error instanceof SlotConflictError || error.statusCode === 409) {
+      return res.status(409).json({ success: false, message: error.message });
+    }
+    res.status(error.statusCode || 500).json({ success: false, message: error.message });
+  }
+};
+
+// GET /api/slots/cancellations - Get Cancellation and Reallocation History
+export const getCancellationHistoryController = async (req, res) => {
+  try {
+    const { activityId } = req.query;
+    const history = await getCancellationHistoryService({
+      activityId,
+      user: req.user
+    });
+
+    res.json({ success: true, count: history.length, history });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

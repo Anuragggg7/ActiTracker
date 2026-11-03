@@ -27,7 +27,11 @@ const activityApprovalSchema = new mongoose.Schema(
         'VERIFICATION',
         'COMPLETED',
         'ARCHIVED',
-        'STATUS_UPDATE'
+        'STATUS_UPDATE',
+        'CANCELLED',
+        'SLOT_OFFERED',
+        'SLOT_REALLOCATED',
+        'PRIORITY_RECOMMENDED'
       ],
       required: true
     },

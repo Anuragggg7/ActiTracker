@@ -6,11 +6,14 @@ import {
   getPendingHodActivities,
   getForwardedHodActivities,
   reviewActivityByHod,
+  updateHodPriority,
   forwardActivityToAdmin,
   getPendingAdminActivities,
   adminApproveActivity,
   adminRejectActivity,
   adminRequestChangesActivity,
+  cancelActivity,
+  getCancellationHistory,
   updateActivity,
   updateActivityBudget,
   updateActivityStatus,
@@ -30,17 +33,23 @@ router.use(protect);
 router.get('/pending-hod', authorize('HOD', 'ADMIN'), getPendingHodActivities);
 router.get('/forwarded-hod', authorize('HOD', 'ADMIN'), getForwardedHodActivities);
 router.get('/pending-admin', authorize('ADMIN', 'DIRECTOR'), getPendingAdminActivities);
+router.get('/cancellations', getCancellationHistory);
 
 // General Activity CRUD & Queries
 router.get('/', getActivities);
 router.get('/:id', getActivityById);
 router.get('/:id/approvals', getActivityApprovals);
+router.get('/:id/cancellations', getCancellationHistory);
 router.post('/', createActivity);
 router.put('/:id', updateActivity);
 router.put('/:id/budget', updateActivityBudget);
 
-// HOD Review & Forward Workflow
+// Activity Cancellation (Enhancement C)
+router.post('/:id/cancel', cancelActivity);
+
+// HOD Review, Priority & Forward Workflow (Enhancement E & F)
 router.put('/:id/hod-review', authorize('HOD', 'ADMIN'), reviewActivityByHod);
+router.patch('/:id/priority', authorize('HOD', 'ADMIN'), updateHodPriority);
 router.patch('/:id/forward-to-admin', authorize('HOD', 'ADMIN'), forwardActivityToAdmin);
 
 // Admin Final Approval & Decision Workflow
