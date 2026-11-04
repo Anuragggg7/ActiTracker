@@ -14,6 +14,17 @@ export const getBaseUrl = () => {
   return envUrl;
 };
 
+/**
+ * Derive the backend root domain from VITE_API_URL.
+ * e.g. 'https://backend.onrender.com/api' → 'https://backend.onrender.com'
+ * Returns '' for local dev (relative paths, handled by Vite proxy or same-origin).
+ */
+const getBackendRoot = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (!envUrl || envUrl === '/api') return '';
+  return envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
+};
+
 // Helper for opening links, downloading files, rendering iframe src or media elements across environments
 export const getApiUrl = (path = '') => {
   if (!path) return '';
@@ -22,19 +33,16 @@ export const getApiUrl = (path = '') => {
     return path;
   }
 
-  const envUrl = import.meta.env.VITE_API_URL;
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const backendRoot = getBackendRoot();
 
-  if (!envUrl || envUrl === '/api') {
-    return cleanPath;
+  // In production, prepend the backend domain for upload/static paths
+  if (backendRoot) {
+    return `${backendRoot}${cleanPath}`;
   }
 
-  const rootDomain = envUrl.replace(/\/+$/, '').replace(/\/api$/, '');
-
-  if (cleanPath.startsWith('/api')) {
-    return `${rootDomain}${cleanPath}`;
-  }
-  return `${rootDomain}${cleanPath}`;
+  // In local dev, relative path is fine (Vite proxy handles /uploads and /api)
+  return cleanPath;
 };
 
 const api = axios.create({
@@ -77,14 +85,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && message) {
       const sessionMessages = ['Session revoked', 'Token verification failed', 'session expired', 'User not found'];
       const isSessionError = sessionMessages.some(s => message.toLowerCase().includes(s.toLowerCase()));
-      // Don't auto-logout on login page credential errors
       const isLoginRequest = error.config?.url?.includes('/auth/login');
 
       if (isSessionError && !isLoginRequest) {
         console.warn('[AUTH] Session invalidated, clearing credentials and redirecting to login.');
         localStorage.removeItem('rcpit_token');
         localStorage.removeItem('rcpit_user');
-        // Redirect to login page
         if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
           window.location.href = '/login';
         }
