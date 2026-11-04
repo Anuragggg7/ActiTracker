@@ -102,10 +102,10 @@ export const createActivityService = async (data, userId) => {
     throw error;
   }
 
-  // 3. Duplicate Activity Name Check within same Academic Year / Category
-  const isDuplicate = await checkForDuplicateActivity({ title, departmentId });
-  if (isDuplicate) {
-    const error = new Error(`An activity titled "${title}" already exists in this department.`);
+  // 3. Duplicate Activity Name Check within same Department
+  const duplicateResult = await checkForDuplicateActivity({ title, departmentId });
+  if (duplicateResult && duplicateResult.isDuplicate) {
+    const error = new Error(duplicateResult.message || `An activity titled "${title}" already exists in this department.`);
     error.statusCode = 400;
     throw error;
   }

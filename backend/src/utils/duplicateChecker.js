@@ -4,22 +4,27 @@ export const checkForDuplicateActivity = async ({ title, departmentId, date, exc
   if (!title) return { isDuplicate: false };
 
   const query = {
-    departmentId
+    departmentId,
+    // Exclude cancelled and rejected activities — their titles should be reusable
+    status: { $nin: ['CANCELLED', 'REJECTED'] }
   };
   if (excludeId) {
     query._id = { $ne: excludeId };
   }
 
-  const departmentActivities = await Activity.find(query);
-
   const cleanTitle = title.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
 
-  for (const act of departmentActivities) {
+  // Use a case-insensitive regex to narrow the DB query instead of fetching all department activities
+  const escapedTitle = cleanTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const candidates = await Activity.find({
+    ...query,
+    title: { $regex: new RegExp(`^${escapedTitle}$`, 'i') }
+  }).select('_id title status date').lean();
+
+  for (const act of candidates) {
     const existingClean = act.title.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-    const isSameDate = date && new Date(act.date).toDateString() === new Date(date).toDateString();
-    
-    // Check exact title match or same title on same date
-    if (cleanTitle === existingClean || (isSameDate && cleanTitle === existingClean)) {
+
+    if (cleanTitle === existingClean) {
       return {
         isDuplicate: true,
         matchingActivity: {
