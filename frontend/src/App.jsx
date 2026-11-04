@@ -165,14 +165,6 @@ export function App() {
                     </ProtectedRoute>
                   }
                 />
-                <Route
-                  path="/hod-archived-view"
-                  element={
-                    <ProtectedRoute allowedRoles={['HOD', 'ADMIN']}>
-                      <HodDashboard />
-                    </ProtectedRoute>
-                  }
-                />
 
                 <Route
                   path="/tp"

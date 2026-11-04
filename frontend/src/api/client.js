@@ -73,6 +73,24 @@ api.interceptors.response.use(
       }
     }
 
+    // Handle session revocation / token expiry — auto-logout and redirect to login
+    if (error.response?.status === 401 && message) {
+      const sessionMessages = ['Session revoked', 'Token verification failed', 'session expired', 'User not found'];
+      const isSessionError = sessionMessages.some(s => message.toLowerCase().includes(s.toLowerCase()));
+      // Don't auto-logout on login page credential errors
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+
+      if (isSessionError && !isLoginRequest) {
+        console.warn('[AUTH] Session invalidated, clearing credentials and redirecting to login.');
+        localStorage.removeItem('rcpit_token');
+        localStorage.removeItem('rcpit_user');
+        // Redirect to login page
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+          window.location.href = '/login';
+        }
+      }
+    }
+
     if (!message) {
       if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error') || !error.response) {
         message = 'Unable to reach backend server. Please verify backend server is running on port 5000.';

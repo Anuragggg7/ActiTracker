@@ -65,6 +65,10 @@ export const refreshToken = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Unauthenticated session' });
     }
     const token = generateToken(req.user._id);
+
+    // Update the activeSessionToken so the new token is recognized
+    await User.findByIdAndUpdate(req.user._id, { activeSessionToken: token, lastActiveAt: new Date() });
+
     res.json({ success: true, token, user: req.user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -75,6 +79,7 @@ export const refreshToken = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     if (req.user) {
+      // Set to null on logout — middleware only blocks 'REVOKED' (admin force-logout)
       await User.findByIdAndUpdate(req.user._id, { activeSessionToken: null });
     }
     res.json({ success: true, message: 'Logged out successfully' });

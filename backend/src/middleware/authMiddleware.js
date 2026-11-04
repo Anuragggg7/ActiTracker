@@ -26,9 +26,10 @@ export const protect = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Your account has been suspended by Administration.' });
     }
 
-    // Session validation: If activeSessionToken is set and does not match the token presented (or was revoked by admin), terminate session
-    if (user.activeSessionToken && user.activeSessionToken !== token) {
-      return res.status(401).json({ success: false, message: 'Session invalidated: Account was logged out or accessed from another session.' });
+    // Session validation: Only reject if session was explicitly revoked by admin or logout
+    // We no longer enforce single-session by comparing tokens — it breaks multi-tab/device usage
+    if (user.activeSessionToken === 'REVOKED') {
+      return res.status(401).json({ success: false, message: 'Session revoked: Your session has been terminated. Please log in again.' });
     }
 
     // Update session timestamp asynchronously

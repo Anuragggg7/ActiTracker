@@ -342,7 +342,7 @@ export const forceLogoutUserService = async (adminUser, userId) => {
     throw new Error('System Policy Violation: Cannot force log out your own current Admin session via Admin Controls.');
   }
 
-  targetUser.activeSessionToken = null;
+  targetUser.activeSessionToken = 'REVOKED';
   targetUser.lastActiveAt = new Date(0);
   await targetUser.save();
 

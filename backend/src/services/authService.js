@@ -46,12 +46,6 @@ export const authenticateUserService = async (identifier, password) => {
 
   if (!user) {
     console.log('USER_FOUND: false');
-    console.log('USER_EMAIL: N/A');
-    console.log('USER_EMPLOYEE_ID: N/A');
-    console.log('USER_ROLE: N/A');
-    console.log('USER_STATUS: N/A');
-    console.log('PASSWORD_HASH_EXISTS: false');
-    console.log('PASSWORD_MATCH_RESULT: false');
     console.log('--------------------------\n');
     throw new Error('Invalid Employee ID/email or password.');
   }
@@ -75,8 +69,11 @@ export const authenticateUserService = async (identifier, password) => {
     throw new Error('Your account is currently inactive. Please contact System Administration.');
   }
 
-  // Generate new JWT session token and update active token on user document
+  // Generate new JWT session token
   const token = generateToken(user._id);
+
+  // Store latest token and clear any revocation flag so multi-tab/device login works
+  // The middleware only blocks 'REVOKED' tokens (admin force-logout), not mismatched tokens
   user.activeSessionToken = token;
   user.lastActiveAt = new Date();
   await user.save();
