@@ -2,6 +2,25 @@ import PDFDocument from 'pdfkit';
 import path from 'path';
 import fs from 'fs';
 
+const UPLOADS_BASE_DIR = path.join(process.cwd(), 'public', 'uploads');
+
+/**
+ * Resolves local file path from a stored fileUrl like '/uploads/images/...'
+ */
+const resolveFilePath = (fileUrl) => {
+  if (!fileUrl) return null;
+  const relativePath = fileUrl.replace(/^\/uploads\//, '');
+  const candidatePaths = [
+    path.join(UPLOADS_BASE_DIR, relativePath),
+    path.join(process.cwd(), fileUrl.startsWith('/') ? fileUrl.slice(1) : fileUrl),
+    path.join(process.cwd(), 'uploads', relativePath)
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+};
+
 /**
  * Publication-Grade Institutional Annual Report PDF Generator for RCPIT
  * Generates official department-wise and consolidated institutional annual activity reports

@@ -4,6 +4,25 @@ import fs from 'fs';
 import { calculateAcademicYear } from '../utils/academicYear.js';
 import { getOrGenerateReportId } from '../utils/reportIdGenerator.js';
 
+const UPLOADS_BASE_DIR_PDF = path.join(process.cwd(), 'public', 'uploads');
+
+/**
+ * Resolves local file path from a stored fileUrl like '/uploads/images/...'
+ */
+const resolveFilePathPdf = (fileUrl) => {
+  if (!fileUrl) return null;
+  const relativePath = fileUrl.replace(/^\/uploads\//, '');
+  const candidatePaths = [
+    path.join(UPLOADS_BASE_DIR_PDF, relativePath),
+    path.join(process.cwd(), fileUrl.startsWith('/') ? fileUrl.slice(1) : fileUrl),
+    path.join(process.cwd(), 'uploads', relativePath)
+  ];
+  for (const p of candidatePaths) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+};
+
 /**
  * Server-Side PDF Generator for ActivityTracker RCPIT
  * Builds official institutional Activity Report PDFs from MongoDB records using pdfkit
@@ -461,13 +480,36 @@ export const buildOfficialActivityPDF = async ({
         doc.fillColor(TEXT_MUTED).fontSize(7.5).font('Helvetica').text('No photographic media files uploaded for this event record.', 40, currentY);
         currentY += 18;
       } else {
-        verifiedMedia.slice(0, 4).forEach((m, idx) => {
-          ensureSpace(22);
-          doc.rect(40, currentY, 515, 20).fillAndStroke(BG_CARD, BORDER_COLOR);
-          doc.fillColor(PRIMARY).fontSize(7.5).font('Helvetica-Bold').text(`[PHOTO #${idx + 1}] ${m.caption || 'Event Photograph'}`, 48, currentY + 5);
-          doc.fillColor(TEXT_MUTED).fontSize(7).font('Helvetica').text(`Status: Verified by HOD | Type: ${m.mediaType || 'IMAGE'} | Date: ${new Date(m.createdAt || Date.now()).toLocaleDateString()}`, 250, currentY + 5);
-          currentY += 24;
-        });
+        const photosToShow = verifiedMedia.slice(0, 4);
+        for (let pi = 0; pi < photosToShow.length; pi++) {
+          const m = photosToShow[pi];
+          const localFile = resolveFilePathPdf(m.fileUrl);
+          const cardH = 140;
+          const cardW = 248;
+          const colIdx = pi % 2;
+          const rowIdx = Math.floor(pi / 2);
+          if (colIdx === 0) ensureSpace(cardH + 30);
+          const curX = 40 + colIdx * (cardW + 19);
+          const curY = currentY + rowIdx * (cardH + 20);
+
+          doc.rect(curX, curY, cardW, cardH).fillAndStroke(BG_CARD, BORDER_COLOR);
+
+          let imageDrawn = false;
+          if (localFile && fs.existsSync(localFile)) {
+            try {
+              doc.image(localFile, curX + 4, curY + 4, { fit: [cardW - 8, cardH - 30], align: 'center', valign: 'center' });
+              imageDrawn = true;
+            } catch (err) { /* fallback */ }
+          }
+          if (!imageDrawn) {
+            doc.rect(curX + 4, curY + 4, cardW - 8, cardH - 30).fill('#f8fafc');
+            doc.fillColor(TEXT_MUTED).fontSize(8).font('Helvetica-Oblique').text('[Photo on Record]', curX + 20, curY + 45, { width: cardW - 40, align: 'center' });
+          }
+
+          const cap = m.caption || m.fileName || 'Event Photograph';
+          doc.fillColor(PRIMARY).fontSize(7).font('Helvetica-Bold').text(cap.slice(0, 50), curX + 6, curY + cardH - 22, { width: cardW - 12 });
+        }
+        currentY += Math.ceil(photosToShow.length / 2) * 160 + 10;
       }
 
       currentY += 8;

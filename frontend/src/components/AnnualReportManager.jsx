@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import api from '../api/client';
+import api, { getApiUrl } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useNotifications } from '../context/NotificationContext';
 import PDFViewerModal from './PDFViewerModal';
@@ -857,7 +857,7 @@ export const AnnualReportManager = ({ forcedDepartmentId = null }) => {
                     <div key={m._id || idx} className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
                       <div className="h-32 bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
                         {m.fileUrl ? (
-                          <img src={m.fileUrl} alt={m.caption || 'Event'} className="w-full h-full object-cover" />
+                          <img src={getApiUrl(m.fileUrl)} alt={m.caption || 'Event'} className="w-full h-full object-cover" />
                         ) : (
                           <ImageIcon className="w-8 h-8 text-slate-400" />
                         )}
@@ -892,7 +892,7 @@ export const AnnualReportManager = ({ forcedDepartmentId = null }) => {
                           <td className="py-2.5 font-bold text-slate-800 dark:text-slate-200">{d.fileName}</td>
                           <td className="py-2.5 text-slate-500">{d.documentType}</td>
                           <td className="py-2.5">
-                            <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-rcpit-600 font-bold hover:underline">
+                            <a href={getApiUrl(d.fileUrl)} target="_blank" rel="noreferrer" className="text-rcpit-600 font-bold hover:underline">
                               Download
                             </a>
                           </td>
